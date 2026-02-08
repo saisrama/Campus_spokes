@@ -4,11 +4,26 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:campuspks/screens/login_screen.dart';
 import 'package:campuspks/screens/home_screen.dart';
+import 'package:flutter/foundation.dart'; // For kIsWeb
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    await Firebase.initializeApp();
+    if (kIsWeb) {
+      await Firebase.initializeApp(
+        options: const FirebaseOptions(
+          apiKey: "AIzaSyA7WUUXsHhcVeAZEtlluFjYMfHW8nu5mOM",
+          authDomain: "campus-spokes.firebaseapp.com",
+          projectId: "campus-spokes",
+          storageBucket: "campus-spokes.firebasestorage.app",
+          messagingSenderId: "960573537207",
+          appId: "1:960573537207:web:26b88cc7514544f9824632",
+          measurementId: "G-BXQVGLTJ5T",
+        ),
+      );
+    } else {
+      await Firebase.initializeApp();
+    }
     debugPrint("Firebase initialized successfully");
   } catch (e) {
     debugPrint("Firebase initialization failed: $e");
