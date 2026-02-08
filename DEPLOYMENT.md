@@ -47,3 +47,18 @@ Flutter Web apps can sometimes have issues with:
 *   **Firebase Setup**: Ensure you have added a **Web App** in your Firebase Console project settings and put the config in `web/index.html` (or `firebase_options.dart` handles it).
 
 For **Campus Spokes**, since you use `google_sign_in` and Firestore, make sure you have enabled the **Authorized Domains** in Firebase Authentication settings for your new Vercel/Firebase URL.
+
+## Troubleshooting: "Access blocked: This app’s request is invalid"
+If you see this error when logging in with Google on Vercel:
+
+1.  Go to the [Google Cloud Console](https://console.cloud.google.com/).
+2.  Select your project (`campus-spokes`).
+3.  Go to **APIs & Services** -> **Credentials**.
+4.  Find the **"Web client (auto created by Google Service)"** (or the one matching your Client ID).
+5.  Under **Authorized JavaScript origins**, click **ADD URI**.
+6.  Paste your Vercel URL (e.g., `https://campus-spokes.vercel.app`).
+    *   *Note: Do not include a trailing slash.*
+7.  Under **Authorized redirect URIs**, click **ADD URI**.
+8.  Paste your Vercel URL followed by `/__/auth/handler` (e.g., `https://campus-spokes.vercel.app/__/auth/handler`).
+9.  Click **Save**.
+10. Wait 5 minutes for Google to propagate the changes.
