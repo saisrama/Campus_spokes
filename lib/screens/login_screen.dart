@@ -43,6 +43,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
       // 3. Get Auth Credentials
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      
+      if (googleAuth.idToken == null && googleAuth.accessToken == null) {
+         throw Exception("Missing Auth Tokens. Please try again.");
+      }
+
       final OAuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
@@ -56,7 +61,15 @@ class _LoginScreenState extends State<LoginScreen> {
         // 5. Check if Profile is Complete
         DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
         
-        if (userDoc.exists && (userDoc.data() as Map<String, dynamic>).containsKey('studentId')) {
+        bool isProfileComplete = false;
+        if (userDoc.exists && userDoc.data() != null) {
+           final data = userDoc.data() as Map<String, dynamic>;
+           if (data.containsKey('studentId')) {
+             isProfileComplete = true;
+           }
+        }
+
+        if (isProfileComplete) {
           // Profile exists and has data -> Go Home
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomeScreen()));
         } else {
