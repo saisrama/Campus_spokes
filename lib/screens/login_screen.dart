@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -12,7 +13,10 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  // Use the specific Client ID for Web, otherwise null (default) for Android/iOS
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    clientId: kIsWeb ? '960573537207-r7k8i6sh833gupogpfc5cg3afm6julu0.apps.googleusercontent.com' : null,
+  );
   bool _isLoading = false;
 
   Future<void> _handleSignIn() async {
