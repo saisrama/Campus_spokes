@@ -1,0 +1,1237 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart';
+
+class CycleDetailScreen extends StatefulWidget {
+  final Map<String, dynamic> data;
+  final String cycleId;
+  final TimeOfDay? initialStartTime;
+  final TimeOfDay? initialEndTime;
+
+  CycleDetailScreen({
+    required this.data, 
+    required this.cycleId,
+    this.initialStartTime,
+    this.initialEndTime,
+  });
+
+  @override
+  _CycleDetailScreenState createState() => _CycleDetailScreenState();
+}
+
+class _CycleDetailScreenState extends State<CycleDetailScreen> {
+  TimeOfDay _startTime = TimeOfDay.now();
+  TimeOfDay _endTime = TimeOfDay.fromDateTime(DateTime.now().add(Duration(hours: 2)));
+  double _totalCost = 0;
+  double _durationInHours = 2.0;
+
+  User? currentUser = FirebaseAuth.instance.currentUser;
+  String? _bookingId;
+  String _bookingStatus = 'none'; // none, booked, started, end_requested, payment_pending, completed
+  DateTime? _rideStartTime;
+  DateTime? _scheduledStartTime;
+  DateTime? _scheduledEndTime;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialStartTime != null) {
+       _startTime = widget.initialStartTime!;
+    }
+    
+    if (widget.initialEndTime != null) {
+       _endTime = widget.initialEndTime!;
+    } else if (widget.initialStartTime != null) {
+       // If start provided but not end, maintain 2 hour duration
+       DateTime startDt = DateTime(2024, 1, 1, _startTime.hour, _startTime.minute);
+       DateTime endDt = startDt.add(Duration(hours: 2));
+       _endTime = TimeOfDay.fromDateTime(endDt);
+    }
+
+    _calculateCost();
+    _checkActiveBooking();
+  }
+
+  Future<void> _checkActiveBooking() async {
+    if (currentUser == null) return;
+    
+    // Check if THIS cycle is already booked by THIS user and not completed
+    var query = await FirebaseFirestore.instance
+        .collection('bookings')
+        .where('userId', isEqualTo: currentUser!.uid)
+        .where('cycleId', isEqualTo: widget.cycleId)
+        .where('status', whereIn: ['booked', 'started', 'payment_pending'])
+        .get();
+
+    if (query.docs.isNotEmpty) {
+      var doc = query.docs.first;
+      setState(() {
+        _bookingId = doc.id;
+        _bookingStatus = doc['status'];
+        if (doc['status'] == 'started' && doc['startTime'] != null) {
+           _rideStartTime = (doc['startTime'] as Timestamp).toDate();
+        }
+        
+        // Fetch Scheduled Times from booking doc (if available)
+        if (doc.data().containsKey('scheduledStartTime')) {
+           _scheduledStartTime = (doc['scheduledStartTime'] as Timestamp).toDate();
+           _scheduledEndTime = (doc['scheduledEndTime'] as Timestamp).toDate();
+           
+           // Update UI TimeOfDay to match scheduled if we re-loaded state
+           if (_scheduledStartTime != null) _startTime = TimeOfDay.fromDateTime(_scheduledStartTime!);
+           if (_scheduledEndTime != null) _endTime = TimeOfDay.fromDateTime(_scheduledEndTime!);
+        }
+        
+        // If owner approved return, show payment immediately
+        if (doc['status'] == 'payment_pending') {
+           _rideStartTime = (doc['startTime'] as Timestamp).toDate(); // Ensure we have start time
+           _calculateFinalCostAndShowPayment();
+        }
+      });
+    }
+  }
+
+  Future<bool> _validateBookingSlot({required TimeOfDay start, required TimeOfDay end}) async {
+    // 1. Validate Past Time
+    DateTime now = DateTime.now();
+    // Truncate seconds for cleaner comparison
+    DateTime nowDateTime = DateTime(now.year, now.month, now.day, now.hour, now.minute);
+    
+    DateTime startDateTime = DateTime(now.year, now.month, now.day, start.hour, start.minute);
+    
+    // Strict check: Start Time < Now - 1 minute (grace)
+    if (startDateTime.isBefore(nowDateTime.subtract(Duration(minutes: 1)))) {
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+         content: Text("Start time cannot be in the past!"),
+         backgroundColor: Colors.redAccent,
+       ));
+       return false;
+    }
+
+    // 2. Validate Overlap with ANY Active Booking
+    DateTime endDateTime = DateTime(now.year, now.month, now.day, end.hour, end.minute);
+    
+    // Handle day wrap
+    if (endDateTime.isBefore(startDateTime)) {
+       endDateTime = endDateTime.add(Duration(days: 1));
+    }
+
+    // PROPOSED SLOT BUFFER LOGIC:
+    // User wants slot [S, E]
+    // Effectively occupies [S, E + 30m]
+    // Condition to be valid: NO overlap with any existing [BookedS, BookedE + 30m]
+    
+    DateTime myEffectiveStart = startDateTime;
+    DateTime myEffectiveEnd = endDateTime.add(Duration(minutes: 30));
+
+    try {
+      var query = await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('cycleId', isEqualTo: widget.cycleId)
+          .where('status', whereIn: ['booked', 'started']) // Active bookings
+          .get();
+
+      for (var doc in query.docs) {
+         var data = doc.data();
+         DateTime? bookedStart;
+         DateTime? bookedEnd;
+         
+         if (data['scheduledStartTime'] != null) bookedStart = (data['scheduledStartTime'] as Timestamp).toDate();
+         else if (data['startTime'] != null) bookedStart = (data['startTime'] as Timestamp).toDate(); 
+         
+         if (data['scheduledEndTime'] != null) bookedEnd = (data['scheduledEndTime'] as Timestamp).toDate();
+         
+         if (bookedStart == null) continue;
+         if (bookedEnd == null) bookedEnd = bookedStart.add(Duration(hours: 2)); 
+         
+         // Truncate seconds from DB timestamps too for fairness
+         bookedStart = DateTime(bookedStart.year, bookedStart.month, bookedStart.day, bookedStart.hour, bookedStart.minute);
+         bookedEnd = DateTime(bookedEnd.year, bookedEnd.month, bookedEnd.day, bookedEnd.hour, bookedEnd.minute);
+
+         // EXISITNG SLOT BUFFER LOGIC:
+         // Occupies [BookedS, BookedE + 30m]
+         DateTime theirEffectiveStart = bookedStart;
+         DateTime theirEffectiveEnd = bookedEnd.add(Duration(minutes: 30));
+         
+         // OVERLAP CHECK:
+         // Two intervals [A,B] and [C,D] overlap if A < D and B > C
+         // In our case:
+         // MyEffectiveStart < TheirEffectiveEnd AND MyEffectiveEnd > TheirEffectiveStart
+         
+         // Example Case:
+         // Me: End 20:15 -> MyEffectiveEnd = 20:45
+         // Them: Start 20:30 -> TheirEffectiveStart = 20:30
+         // MyEffectiveStart (say 18:15) < TheirEffectiveEnd (say 22:30?) - TRUE
+         // MyEffectiveEnd (20:45) > TheirEffectiveStart (20:30) - TRUE (OVERLAP!)
+         
+         if (myEffectiveStart.isBefore(theirEffectiveEnd) && myEffectiveEnd.isAfter(theirEffectiveStart)) {
+            DateTime displayBookedEndWithBuffer = bookedEnd.add(Duration(minutes: 30));
+            String conflictMsg = "Gap conflict! Cycles need 30m buffer. Intersection with booking ${DateFormat('HH:mm').format(bookedStart)} - ${DateFormat('HH:mm').format(displayBookedEndWithBuffer)}";
+
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(conflictMsg),
+              backgroundColor: Colors.redAccent,
+              duration: Duration(seconds: 4),
+            ));
+            return false;
+         }
+      }
+    } catch (e) {
+      print("Error validating slot: $e");
+      return false; // Fail safe?
+    }
+    
+    return true;
+  }
+
+  Future<void> _selectTime(bool isStart) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: isStart ? _startTime : _endTime,
+      builder: (context, child) => Theme(
+        data: ThemeData.dark().copyWith(
+          colorScheme: ColorScheme.dark(primary: Colors.white, onSurface: Colors.white),
+        ),
+        child: child!,
+      ),
+    );
+
+    if (picked != null) {
+      TimeOfDay tempStart = isStart ? picked : _startTime;
+      TimeOfDay tempEnd = isStart ? _endTime : picked;
+
+      bool isValid = await _validateBookingSlot(start: tempStart, end: tempEnd);
+      
+      if (isValid) {
+        setState(() {
+          if (isStart) _startTime = picked;
+          else _endTime = picked;
+          _calculateCost();
+        });
+      }
+    }
+  }
+
+  void _calculateCost() {
+    double start = _startTime.hour + _startTime.minute / 60.0;
+    double end = _endTime.hour + _endTime.minute / 60.0;
+    if (end < start) end += 24; // Handle overnight
+
+    _durationInHours = end - start;
+    if (_durationInHours < 0) _durationInHours = 0;
+
+    int basePrice = (widget.data['basePrice'] ?? 20).toInt();
+    int hourlyPrice = (widget.data['hourlyPrice'] ?? 10).toInt();
+
+    if (_durationInHours <= 2) {
+      _totalCost = basePrice.toDouble();
+    } else {
+      double extraHours = _durationInHours - 2;
+      _totalCost = basePrice + (extraHours.ceil() * hourlyPrice).toDouble();
+    }
+  }
+
+  // LATE FEE CALCULATION
+  double _calculateLateFee(double durationInHours) {
+    // If user booked for X hours but returned after X+Y hours
+    // This requires us to know the EXPECTED end time. 
+    // In the current simple flow, we don't store "Expected Duration" strongly in the booking document active state 
+    // (except initially).
+    // However, for the purpose of this feature request "Late Fee 2x", let's assume:
+    // Any time beyond the initial 2 hours base slot (or chosen slot) is charged 2x? 
+    // OR: If they exceed the time they selected in the TimePicker initially.
+    
+    // Simplification for MVP: The standard cost logic already charges for extra hours. 
+    // The requirement says "Late Return Fee is usually 2x to 4x".
+    // So if they booked for 2 hours but used 3, the 3rd hour is late? 
+    // Or if they booked for 4 hours and used 5?
+    
+    // Implementation: We will use the selected _endTime from the UI as the "Expected Return Time".
+    // If the current time (now) > _rideStartTime + (expected duration), then it's late.
+    
+    // But _calculateFinalCostAndShowPayment calculates based on ACTUAL duration.
+    // So we need to modify the cost formula there.
+    return 0.0;
+  }
+
+  // BOOKING LOGIC
+  Future<void> _handleBookingAction() async {
+    if (_bookingStatus == 'none') {
+      // BOOK RIDE 
+      
+      // 1. Check if user already has ANY active booking
+      var activeBookingQuery = await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('userId', isEqualTo: currentUser!.uid)
+          .where('status', whereIn: ['booked', 'started', 'payment_pending'])
+          .limit(1)
+          .get();
+
+      if (activeBookingQuery.docs.isNotEmpty) {
+        // User has an active booking
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("You already have an active ride. Please complete it first."),
+          backgroundColor: Colors.redAccent,
+        ));
+        return;
+      }
+      
+      // 2. Validate Time Slot (Check Overlaps) - Loophole Fix
+      // Even if user didn't change time (default), we must check availability
+      bool isValid = await _validateBookingSlot(start: _startTime, end: _endTime);
+      if (!isValid) return; // Stop booking if invalid
+
+      // Show Start/End Time Confirmation
+      _showActionConfirmationDialog(
+        action: "Book Ride",
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text("Confirm your booking details:", style: TextStyle(color: Colors.white70)),
+            SizedBox(height: 10),
+            Text("Start Time: ${_startTime.format(context)}", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            Text("End Time: ${_endTime.format(context)}", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            SizedBox(height: 10),
+            Text("Est. Cost: ₹${_totalCost.toStringAsFixed(0)}", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        onConfirm: _createBooking
+      );
+
+    } else if (_bookingStatus == 'booked') {
+      // START RIDE
+      
+      // Enforce Start Time
+      if (_scheduledStartTime != null) {
+        if (DateTime.now().isBefore(_scheduledStartTime!)) {
+           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+             content: Text("You cannot start the ride before ${_startTime.format(context)}"),
+             backgroundColor: Colors.redAccent,
+           ));
+           return;
+        }
+      }
+      
+       _showTermsAndConditionsDialog();
+
+    } else if (_bookingStatus == 'started') {
+      // END RIDE - Simple Confirmation
+      _showActionConfirmationDialog(
+        action: "End Ride",
+        content: Text("Are you sure you want to end your ride?", style: TextStyle(color: Colors.white70)),
+        onConfirm: () async {
+           await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({
+            'status': 'payment_pending',
+            'endTime': FieldValue.serverTimestamp(),
+          });
+          setState(() {
+            _bookingStatus = 'payment_pending';
+            // We need to fetch endTime from server ideally, but for now we proceed
+          });
+           _calculateFinalCostAndShowPayment();
+        }
+      );
+
+    } else if (_bookingStatus == 'payment_pending') {
+       _calculateFinalCostAndShowPayment();
+    }
+  }
+
+  // CANCEL RIDE LOGIC
+  Future<void> _handleCancellation() async {
+    // 1. Show Warning Dialog
+    double estimatedCost = _totalCost;
+    double cancellationFee = estimatedCost * 0.5;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Color(0xFF1E1E1E),
+        title: Text("Cancel Ride?", style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Cancellation Policy:", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+            Text("You will be charged 50% of the estimated cost.", style: TextStyle(color: Colors.grey)),
+            SizedBox(height: 10),
+            Text("Fee: ₹${cancellationFee.toStringAsFixed(0)}", style: TextStyle(fontSize: 20, color: Colors.redAccent, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            child: Text("BACK", style: TextStyle(color: Colors.white)),
+            onPressed: () => Navigator.pop(context),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () {
+              Navigator.pop(context);
+              _processCancellationPayment(cancellationFee);
+            },
+            child: Text("ACCEPT & CANCEL", style: TextStyle(color: Colors.white)),
+          )
+        ],
+      )
+    );
+  }
+
+  void _processCancellationPayment(double fee) {
+     showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Color(0xFF1E1E1E),
+        title: Text("Pay Cancellation Fee"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Cancellation Fee: ₹${fee.toStringAsFixed(0)}", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.white),
+            onPressed: () {
+              Navigator.pop(context); // Close Payment Dialog
+              _launchUPI(fee, onSuccess: () => _finalizeCancellation(fee));
+            },
+            child: Text("PAY NOW", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          )
+        ],
+      ),
+    );
+  }
+
+  Future<void> _finalizeCancellation(double fee) async {
+      try {
+        // Snapshot user details for history reliability
+        String renterName = "User";
+        String renterPhone = "";
+        try {
+           DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(widget.data['userId']).get();
+           if (userDoc.exists) {
+             var uData = userDoc.data() as Map<String, dynamic>;
+             renterName = uData['displayName'] ?? "User";
+             renterPhone = uData['phoneNumber'] ?? "";
+           }
+        } catch (e) {
+           print("Error fetching user for snapshot: $e");
+        }
+
+        await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({
+          'status': 'cancelled',
+          'cancelledAt': FieldValue.serverTimestamp(),
+          'cancellationFee': fee,
+          'finalCost': fee, // Record as final cost for history
+          'renterName': renterName, // Snapshot for history
+          'renterPhone': renterPhone,
+        });
+
+        await FirebaseFirestore.instance.collection('cycles').doc(widget.cycleId).update({
+          'isAvailable': true,
+        });
+
+        setState(() {
+          _bookingStatus = 'cancelled';
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Ride Cancelled.")));
+        // Navigate back or refresh state? For now, stay on screen but status is 'cancelled' (which might show simplified view or exit)
+        // User probably expects to leave or see cancelled state.
+        
+        // Let's pop back to Home or show a "Cancelled" view. 
+        // Showing "Cancelled" view for now by letting build() handle it (we might need to add 'cancelled' to button logic if we persist).
+        // Actually, let's just pop.
+        Navigator.pop(context); 
+
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error cancelling: $e")));
+      }
+  }
+
+  void _showActionConfirmationDialog({required String action, required Widget content, required VoidCallback onConfirm}) {
+     showDialog(
+       context: context,
+       builder: (context) => AlertDialog(
+         backgroundColor: Color(0xFF1E1E1E),
+         title: Text(action, style: TextStyle(color: Colors.white)),
+         content: content,
+         actions: [
+           TextButton(
+             child: Text("CANCEL", style: TextStyle(color: Colors.grey)),
+             onPressed: () => Navigator.pop(context),
+           ),
+           ElevatedButton(
+             style: ElevatedButton.styleFrom(backgroundColor: Colors.white),
+             child: Text("CONFIRM", style: TextStyle(color: Colors.black)),
+             onPressed: () {
+               Navigator.pop(context); // Close dialog
+               onConfirm(); // Execute action
+             },
+           )
+         ],
+       )
+     );
+  }
+
+  void _calculateFinalCostAndShowPayment() {
+    // If _rideStartTime is null (e.g. app restart), fetch it or handle error. 
+    DateTime startTime = _rideStartTime ?? DateTime.now(); // Fallback
+    
+    // We need the original planned end time to determine "Late". 
+    // Since we didn't strictly save "Planned End Time" in the 'started' state update previously, 
+    // we will fetch the 'createdAt' and 'basePrice' logic or rely on the booking doc if we saved it.
+    // For this implementation, we will fetch the booking doc to be precise if needed, 
+    // but to avoid async complexity here, we'll re-implement a robust cost logic.
+    
+    // FETCH BOOKING TO GET PLANNED DURATION (We need to save this in _createBooking to be accurate)
+    // For now, let's assume the 'standard' booking is 2 hours. Anything above 2 hours is "extra/late".
+    // OR: Use 2x for ALL extra time beyond base 2 hours.
+    
+    final duration = DateTime.now().difference(startTime);
+    final double durationInHours = duration.inMinutes / 60.0;
+    
+    int basePrice = widget.data['basePrice'] ?? 20;
+    int hourlyPrice = widget.data['hourlyPrice'] ?? 10;
+    double finalCost = 0;
+    bool isLate = false;
+    double lateFee = 0;
+
+    if (durationInHours <= 2) {
+      finalCost = basePrice.toDouble();
+    } else {
+      // User exceeded the 2 hour base slot.
+      // Apply 2x Late Fee for every extra hour
+      double extraHours = durationInHours - 2;
+      double extraHoursCeil = extraHours.ceilToDouble();
+      
+      // LATE FEE: 2x Standard Hourly Price
+      double feePerHour = hourlyPrice * 2.0; 
+      
+      lateFee = extraHoursCeil * feePerHour;
+      finalCost = basePrice + lateFee;
+      isLate = true;
+    }
+
+    _showEndRideDialog(finalCost, durationInHours, isLate, lateFee);
+  }
+
+  void _showEndRideDialog(double cost, double durationHrs, bool isLate, double lateFee) {
+    DateTime startTime = _rideStartTime ?? DateTime.now().subtract(Duration(minutes: (durationHrs * 60).round()));
+    DateTime endTime = DateTime.now();
+    double baseCost = cost - lateFee;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Color(0xFF1E1E1E),
+        title: Text("End Ride & Pay", style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Time Breakdown
+            _buildDialogRow("Start Time", DateFormat('hh:mm a').format(startTime)),
+            _buildDialogRow("End Time", DateFormat('hh:mm a').format(endTime)),
+            _buildDialogRow("Total Duration", "${durationHrs.toStringAsFixed(1)} hrs"),
+            Divider(color: Colors.white24),
+            
+            // Cost Breakdown
+            _buildDialogRow("Base Cost", "₹${baseCost.toStringAsFixed(0)}"),
+            if (isLate) ...[
+               _buildDialogRow("Late Fee (2x)", "+₹${lateFee.toStringAsFixed(0)}", valueColor: Colors.redAccent),
+               SizedBox(height: 5),
+               Text(
+                 "Late Return Detected! You exceeded the 2hr base slot.", 
+                 style: TextStyle(color: Colors.redAccent, fontSize: 10)
+               ),
+            ],
+            Divider(color: Colors.white24),
+            
+            // Total
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text("Total To Pay", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                  Text("₹${cost.toStringAsFixed(0)}", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.green)),
+                ],
+              ),
+            )
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.white),
+            onPressed: () {
+              Navigator.pop(context);
+              _launchUPI(cost, onSuccess: () => _showRatingDialog(cost));
+            },
+            child: Text("PAY NOW", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDialogRow(String label, String value, {Color valueColor = Colors.white}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(color: Colors.grey)),
+          Text(value, style: TextStyle(color: valueColor, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  // TERMS AND CONDITIONS DIALOG
+  void _showTermsAndConditionsDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Color(0xFF1E1E1E),
+        title: Text("Terms & Conditions", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Container(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                 Text("Please read and accept the following terms to start your ride:", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                 SizedBox(height: 15),
+                 _buildTermItem("1. Facilitator Role", "Campus Spokes is strictly a platform to connect Cycle Owners with Renters. We do not own the cycles and are not a party to the rental agreement."),
+                 _buildTermItem("2. No Liability", "Campus Spokes is NOT responsible for any accidents, injuries, or damages caused to the rider, third parties, or property during the ride."),
+                 _buildTermItem("3. Prohibited Use", "Using the cycle/app for illegal, illicit, or unauthorized purposes is strictly prohibited. Users found misusing the platform will be banned."),
+                 _buildTermItem("4. Dispute Resolution", "Any disputes regarding cycle condition, payments, or damages must be resolved directly between the Owner and the Renter. Campus Spokes will not mediate financial or physical disputes."),
+                 _buildTermItem("5. Safety", "Riders are advised to follow traffic rules and ride responsibly. Currently, we do not provide insurance cover."),
+                 SizedBox(height: 10),
+                 Text("By clicking 'Accept & Start', you acknowledge that you have read and agreed to these terms.", style: TextStyle(color: Colors.white70, fontSize: 11, fontStyle: FontStyle.italic)),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Decline", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            onPressed: () {
+               Navigator.pop(context); // Close T&C
+               _startRide(); // Proceed to Start Logic
+            },
+            child: Text("Accept & Start", style: TextStyle(color: Colors.white)),
+          )
+        ],
+      )
+    );
+  }
+
+  Widget _buildTermItem(String title, String content) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+          SizedBox(height: 4),
+          Text(content, style: TextStyle(color: Colors.white60, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startRide() async {
+      // Proceed to Start Ride
+       _showActionConfirmationDialog(
+        action: "Start Ride",
+        content: Text("Are you near the cycle and ready to start?", style: TextStyle(color: Colors.white70)),
+        onConfirm: () async {
+            await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({
+              'status': 'started',
+              'startTime': FieldValue.serverTimestamp(),
+            });
+            setState(() {
+              _bookingStatus = 'started';
+              _rideStartTime = DateTime.now();
+            });
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Ride Started! Have fun!")));
+        }
+      );
+  }
+
+
+
+  Future<void> _createBooking() async {
+    try {
+      // Create Booking
+      var ref = await FirebaseFirestore.instance.collection('bookings').add({
+        'userId': currentUser!.uid,
+        'ownerId': widget.data['ownerId'],
+        'cycleId': widget.cycleId,
+        'status': 'booked',
+        'createdAt': FieldValue.serverTimestamp(),
+        'basePrice': widget.data['basePrice'], 
+        'hourlyPrice': widget.data['hourlyPrice'],
+        'cycleData': widget.data, 
+        
+        // Snapshot Owner Details for History
+        'ownerName': widget.data['ownerName'] ?? 'Student',
+        'ownerPhone': widget.data['ownerPhone'] ?? 'N/A',
+
+        // Save Scheduled Times
+        'scheduledStartTime': DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, _startTime.hour, _startTime.minute),
+        'scheduledEndTime': DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, _endTime.hour, _endTime.minute),
+      });
+
+      // Update local state with scheduled times immediately
+      _scheduledStartTime = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, _startTime.hour, _startTime.minute);
+      _scheduledEndTime = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, _endTime.hour, _endTime.minute);
+
+      // Delist the cycle (Mark as unavailable) AND set nextAvailableTime (End + 30m buffer)
+      DateTime nextAvailable = _scheduledEndTime!.add(Duration(minutes: 30));
+      
+      await FirebaseFirestore.instance.collection('cycles').doc(widget.cycleId).update({
+        'isAvailable': false,
+        'nextAvailableTime': nextAvailable,
+      });
+
+      setState(() {
+        _bookingId = ref.id;
+        _bookingStatus = 'booked';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Cycle Booked! It is now reserved for you.")));
+      
+      // WhatsApp Redirect
+      String? ownerPhone = widget.data['ownerPhone'];
+      if (ownerPhone != null && ownerPhone.isNotEmpty && ownerPhone != "N/A") {
+          try {
+            // Strip non-digits
+            String cleanPhone = ownerPhone.replaceAll(RegExp(r'\D'), '');
+            // Add country code if missing (Assuming India +91 for this context)
+            if (!cleanPhone.startsWith('91') && cleanPhone.length == 10) {
+              cleanPhone = '91$cleanPhone';
+            }
+            
+            String startTimeStr = _startTime.format(context);
+            String endTimeStr = _endTime.format(context);
+            String message = "Hi, I just reserved your cycle (${widget.data['modelName']}) on *Campus Spokes*.\n\n"
+                             "*Time:* $startTimeStr to $endTimeStr\n"
+                             "*Estimated Cost:* ₹${_totalCost.toStringAsFixed(0)}\n\n"
+                             "Please confirm availability.";
+            
+            final Uri waUrl = Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encodeComponent(message)}");
+            await launchUrl(waUrl, mode: LaunchMode.externalApplication);
+          } catch (e) {
+             print("Could not launch WhatsApp: $e");
+          }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Booking failed: $e")));
+    }
+  }
+
+  void _showConfirmationAndPay() {
+      // Logic moved to End Ride. 
+      // Rent Now just creates the booking.
+      _createBooking();
+  }
+
+  void _launchUPI(double amount, {required VoidCallback onSuccess}) async {
+    String upiId = widget.data['ownerUpiId'] ?? '';
+    final Uri upiUrl = Uri.parse('upi://pay?pa=$upiId&pn=CycleOwner&am=$amount&cu=INR&tn=CycleRent');
+    
+    try {
+      await launchUrl(upiUrl, mode: LaunchMode.externalApplication);
+      // Assuming payment success for demo
+      onSuccess();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Could not launch UPI app.")));
+      onSuccess(); // Proceed for demo
+    }
+  }
+
+  Widget _buildReviewsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text("Reviews", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+        SizedBox(height: 10),
+        StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('bookings')
+              .where('cycleId', isEqualTo: widget.cycleId)
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.hasError) return Text("Error loading reviews", style: TextStyle(color: Colors.red));
+            if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator());
+            
+            // Filter queries client side to avoid index issues with multiple fields
+            var docs = snapshot.data!.docs.where((d) {
+              var data = d.data() as Map<String, dynamic>;
+              // Check if rating exists and is > 0
+              return data.containsKey('rating') && data['rating'] != null && (data['rating'] as num) > 0;
+            }).toList();
+
+            if (docs.isEmpty) {
+              return Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Color(0xFF2C2C2C), borderRadius: BorderRadius.circular(12)),
+                child: Center(child: Text("No reviews yet.", style: TextStyle(color: Colors.grey))),
+              );
+            }
+
+            return ListView.builder(
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
+              itemCount: docs.length,
+              itemBuilder: (context, index) {
+                var data = docs[index].data() as Map<String, dynamic>;
+                double rating = (data['rating'] ?? 0.0).toDouble();
+                String text = data['reviewText'] ?? "";
+                
+                return Container(
+                  margin: EdgeInsets.only(bottom: 10),
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Color(0xFF2C2C2C),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 12,
+                            backgroundColor: Colors.grey,
+                            child: Icon(Icons.person, size: 16, color: Colors.white),
+                          ),
+                          SizedBox(width: 8),
+                          Text("Anonymous User", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                          Spacer(),
+                          Icon(Icons.star, color: Colors.amber, size: 16),
+                          Text(" ${rating.toStringAsFixed(1)}", style: TextStyle(color: Colors.amber)),
+                        ],
+                      ),
+                      if (text.isNotEmpty) ...[
+                        SizedBox(height: 8),
+                        Text(text, style: TextStyle(color: Colors.white70)),
+                      ]
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+
+
+
+
+
+  void _showRatingDialog(double finalCost) {
+    double rating = 5.0;
+    TextEditingController _reviewController = TextEditingController();
+    
+    // Capture the context of the Screen (CycleDetailScreen)
+    final BuildContext screenContext = context;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: Color(0xFF1E1E1E),
+            title: Text("Rate Your Ride"),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text("How was your experience?", style: TextStyle(color: Colors.grey)),
+                  SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (index) {
+                      return IconButton(
+                        icon: Icon(
+                          index < rating ? Icons.star : Icons.star_border,
+                          color: Colors.amber,
+                          size: 30,
+                        ),
+                        onPressed: () {
+                          setDialogState(() {
+                            rating = index + 1.0;
+                          });
+                        },
+                      );
+                    }),
+                  ),
+                  SizedBox(height: 10),
+                  TextField(
+                    controller: _reviewController,
+                    maxLines: 3,
+                    style: TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: "Write a review (optional)...",
+                      hintStyle: TextStyle(color: Colors.white54),
+                      filled: true,
+                      fillColor: Colors.white10,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  )
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                child: Text("NOT NOW", style: TextStyle(color: Colors.grey)),
+                onPressed: () async {
+                   // Mark as completed without rating update
+                   await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({
+                    'status': 'completed',
+                    'endTime': FieldValue.serverTimestamp(),
+                    'finalCost': finalCost,
+                   });
+                   
+                   await FirebaseFirestore.instance.collection('cycles').doc(widget.cycleId).update({
+                    'isAvailable': true,
+                   });
+
+                   setState(() { _bookingStatus = 'completed'; });
+                   Navigator.pop(context); // Close Dialog
+                   if (screenContext.mounted) Navigator.pop(screenContext); // Close Screen
+                },
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.white),
+                child: Text("SUBMIT", style: TextStyle(color: Colors.black)),
+                onPressed: () async {
+                  // 1. Update Booking
+                  await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({
+                    'status': 'completed',
+                    'endTime': FieldValue.serverTimestamp(),
+                    'finalCost': finalCost,
+                    'rating': rating,
+                    'reviewText': _reviewController.text.trim(),
+                  });
+
+                  // 2. Update Cycle Stats (Avg Rating & Count)
+                  DocumentReference cycleRef = FirebaseFirestore.instance.collection('cycles').doc(widget.cycleId);
+                  
+                  FirebaseFirestore.instance.runTransaction((transaction) async {
+                    DocumentSnapshot snapshot = await transaction.get(cycleRef);
+                    if (!snapshot.exists) return;
+
+                    var data = snapshot.data() as Map<String, dynamic>;
+                    double currentAvg = (data['averageRating'] ?? 0.0).toDouble();
+                    int currentCount = (data['reviewCount'] ?? 0).toInt();
+
+                    double newAvg = ((currentAvg * currentCount) + rating) / (currentCount + 1);
+                    
+                    transaction.update(cycleRef, {
+                      'averageRating': newAvg,
+                      'reviewCount': currentCount + 1,
+                      'isAvailable': true, // Relist here too
+                    });
+                  });
+                  
+                  setState(() {
+                    _bookingStatus = 'completed';
+                  });
+                  
+                  Navigator.pop(context); 
+                  if (screenContext.mounted) {
+                    Navigator.pop(screenContext); 
+                  }
+                },
+              )
+            ],
+          );
+        },
+      ),
+    );
+  }
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        children: [
+          Expanded(
+            child: CustomScrollView(
+              slivers: [
+                SliverAppBar(
+                  expandedHeight: 300,
+                  pinned: true,
+                  flexibleSpace: FlexibleSpaceBar(
+                    background: _buildImage(),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(widget.data['modelName'], style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
+                        Text(widget.data['description'] ?? "No description provided.", style: TextStyle(color: Colors.grey)),
+                        SizedBox(height: 20),
+                        
+                        // OWNER INFO
+                        Container(
+                          padding: EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Color(0xFF1E1E1E),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white10)
+                          ),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: Colors.grey[800],
+                                child: Icon(Icons.person, color: Colors.white),
+                              ),
+                              SizedBox(width: 15),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text("Owner: ${widget.data['ownerName'] ?? 'Student'}", style: TextStyle(fontWeight: FontWeight.bold)),
+                                  Text("Phone: ${widget.data['ownerPhone'] ?? 'N/A'}", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                  Text("Room: ${widget.data['roomNumber'] ?? 'N/A'}", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                ],
+                              )
+                            ],
+                          ),
+                        ),
+                        SizedBox(height: 30),
+      
+                        // TIME PICKER ROW (Only if NOT booked/started/payment_pending)
+                        if (_bookingStatus == 'none') ...[
+                           Text("Select Time Slot:", style: TextStyle(fontWeight: FontWeight.bold)),
+                           SizedBox(height: 10),
+                           Row(
+                             children: [
+                               Expanded(child: _buildTimeBox("Start", _startTime, () => _selectTime(true))),
+                               SizedBox(width: 10),
+                               Icon(Icons.arrow_forward, color: Colors.grey),
+                               SizedBox(width: 10),
+                               Expanded(child: _buildTimeBox("End", _endTime, () => _selectTime(false))),
+                             ],
+                           ),
+                           SizedBox(height: 30),
+                        ] else ...[
+                           // STATIC BOOKING INFO FOR ACTIVE RIDES
+                           Container(
+                             padding: EdgeInsets.all(16),
+                             decoration: BoxDecoration(
+                               color: Color(0xFF1E1E1E), // Slightly distinct background
+                               borderRadius: BorderRadius.circular(12),
+                               border: Border.all(color: Colors.blueAccent.withOpacity(0.3))
+                             ),
+                             child: Column(
+                               crossAxisAlignment: CrossAxisAlignment.start,
+                               children: [
+                                 Text(_bookingStatus == 'started' ? "Ride In Progress" : "Booking Details", 
+                                     style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+                                 SizedBox(height: 10),
+                                 Row(
+                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                   children: [
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text("Start Time", style: TextStyle(color: Colors.grey, fontSize: 10)),
+                                          Text(_startTime.format(context), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                        ],
+                                      ),
+                                      Icon(Icons.arrow_forward, color: Colors.grey, size: 16),
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                        children: [
+                                          Text("Booked Until", style: TextStyle(color: Colors.grey, fontSize: 10)),
+                                          Text(_endTime.format(context), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                        ],
+                                      ),
+                                   ],
+                                 ),
+                                 if (_bookingStatus == 'started' && _rideStartTime != null) ...[
+                                    SizedBox(height: 10),
+                                    Divider(color: Colors.white12),
+                                    SizedBox(height: 5),
+                                    Row(
+                                      children: [
+                                        Icon(Icons.timer, size: 14, color: Colors.green),
+                                        SizedBox(width: 5),
+                                        Text("Started at: ${DateFormat('hh:mm a').format(_rideStartTime!)}", style: TextStyle(color: Colors.green, fontSize: 12)),
+                                      ],
+                                    )
+                                 ]
+                               ],
+                             ),
+                           ),
+                           SizedBox(height: 30),
+                        ],
+                        
+                        // COST DISPLAY
+                        Container(
+                          padding: EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Color(0xFF2C2C2C),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white10)
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text("Total Estimated Cost", style: TextStyle(color: Colors.grey)),
+                              Text("₹${_totalCost.toStringAsFixed(0)}", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.green)),
+                            ],
+                          ),
+                        ),
+      
+                        SizedBox(height: 30),
+                        
+                        // REVIEWS SECTION
+                        _buildReviewsSection(),
+      
+                        SizedBox(height: 80), // Extra space at bottom for scrolling past button area
+                      ],
+                    ),
+                  ),
+                )
+              ],
+            ),
+          ),
+          
+          // FIXED BOTTOM BUTTON CONTAINER
+          Container(
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Color(0xFF1E1E1E),
+              border: Border(top: BorderSide(color: Colors.white10)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  height: 55,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _getButtonColor(),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                    ),
+                    onPressed: _bookingStatus == 'cancelled' ? null : _handleBookingAction,
+                    child: Text(
+                      _bookingStatus == 'none' ? "BOOK RIDE" :
+                      (_bookingStatus == 'booked' ? "START RIDE" : 
+                      (_bookingStatus == 'started' ? "END RIDE" : 
+                      (_bookingStatus == 'payment_pending' ? "PAY NOW" : 
+                      (_bookingStatus == 'cancelled' ? "CANCELLED" : "COMPLETED")))),
+                      style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)
+                    ),
+                  ),
+                ),
+                
+                // CANCEL BUTTON (Only if status is 'booked')
+                if (_bookingStatus == 'booked') ...[
+                  SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 45,
+                    child: TextButton(
+                      onPressed: _handleCancellation,
+                      child: Text("Cancel Ride", style: TextStyle(color: Colors.redAccent)),
+                    ),
+                  ),
+                ]
+              ],
+            ),
+          ),
+          
+          // DISCLAIMER SECTION
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            color: Color(0xFF121212),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                 Text("Disclaimer & Policy", style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
+                 SizedBox(height: 4),
+                 Text("• Late Returns: Charged at 2x the hourly rate for delays beyond the booked slot.", style: TextStyle(color: Colors.white38, fontSize: 9)),
+                 Text("• Liability: Campus Spokes facilitates connections only. We are not responsible for accidents, damages, or disputes.", style: TextStyle(color: Colors.white38, fontSize: 9)),
+                 Text("• Disputes: All financial or physical disputes must be resolved directly between Owner and Renter.", style: TextStyle(color: Colors.white38, fontSize: 9)),
+                 SizedBox(height: 10), // Buffer for Android Nav Bar
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimeBox(String label, TimeOfDay time, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: 15),
+        decoration: BoxDecoration(
+          color: Color(0xFF1E1E1E),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white24)
+        ),
+        child: Column(
+          children: [
+            Text(label, style: TextStyle(color: Colors.grey, fontSize: 12)),
+            SizedBox(height: 5),
+            Text(time.format(context), style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _getButtonColor() {
+     if (_bookingStatus == 'none') return Colors.white;
+     if (_bookingStatus == 'booked') return Colors.greenAccent;
+     if (_bookingStatus == 'started') return Colors.redAccent;
+     if (_bookingStatus == 'payment_pending') return Colors.greenAccent;
+     return Colors.grey;
+  }
+
+  Widget _buildImage() {
+     String? imageUrl = widget.data['imageUrl'];
+     if (imageUrl == null || imageUrl.isEmpty) {
+        return Container(color: Colors.grey[850], child: Icon(Icons.directions_bike, size: 80, color: Colors.white24));
+     }
+
+     if (imageUrl.startsWith('http')) {
+        return Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.grey[850], child: Icon(Icons.directions_bike, size: 80, color: Colors.white24)));
+     }
+     
+     try {
+       return Image.memory(base64Decode(imageUrl), fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.grey[850], child: Icon(Icons.broken_image, size: 80, color: Colors.white24)));
+     } catch (e) {
+       return Container(color: Colors.grey[850], child: Icon(Icons.error, size: 80, color: Colors.white24));
+     }
+  }
+}

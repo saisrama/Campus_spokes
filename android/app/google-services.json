@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "960573537207",
+    "project_id": "campus-spokes",
+    "storage_bucket": "campus-spokes.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:960573537207:android:258629bfc48d6bb5824632",
+        "android_client_info": {
+          "package_name": "com.example.campuspks"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBuGmVxSZr3ym5BhgycXWyUs0ycWTwwA1Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
