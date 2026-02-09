@@ -4,11 +4,24 @@ import 'home_screen.dart';
 import 'explore_screen.dart';
 import 'add_cycle_screen.dart'; // Add import
 
+import 'package:firebase_auth/firebase_auth.dart'; // Add import
+import 'profile_screen.dart'; // Add import
+import 'add_cycle_screen.dart'; 
+
 class LandingScreen extends StatelessWidget {
+  final User? user = FirebaseAuth.instance.currentUser; // Get User
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFF121212), // Dark background
+      backgroundColor: Color(0xFF121212),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddCycleScreen())),
+        label: Text("List My Cycle"),
+        icon: Icon(Icons.add),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
@@ -17,17 +30,30 @@ class LandingScreen extends StatelessWidget {
             children: [
               // HEADER
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween, // Space between Logo and Profile
                 children: [
-                  Image.asset('assets/images/logo.png', height: 40), // Adjust height as needed
-                  SizedBox(width: 12),
-                  Text(
-                    "Campus Spokes",
-                    style: GoogleFonts.medulaOne(
-                      textStyle: TextStyle(
-                        color: Colors.white,
-                        fontSize: 36, // Medula One is condensed, so larger size is good
-                        fontWeight: FontWeight.normal,
+                  Row(
+                    children: [
+                      Image.asset('assets/images/logo.png', height: 40),
+                      SizedBox(width: 12),
+                      Text(
+                        "Campus Spokes",
+                        style: GoogleFonts.medulaOne(
+                          textStyle: TextStyle(
+                            color: Colors.white,
+                            fontSize: 36,
+                            fontWeight: FontWeight.normal,
+                          ),
+                        ),
                       ),
+                    ],
+                  ),
+                  // Profile Avatar
+                  GestureDetector(
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileScreen())),
+                    child: CircleAvatar(
+                      backgroundImage: NetworkImage(user?.photoURL ?? "https://via.placeholder.com/150"),
+                      backgroundColor: Colors.grey,
                     ),
                   ),
                 ],
@@ -49,17 +75,9 @@ class LandingScreen extends StatelessWidget {
 
               SizedBox(height: 24), // Spacing between cards
 
-              // CARD 2: LIST MY CYCLE (New)
-              _buildLandingCard(
-                context,
-                title: "List my cycle",
-                icon: Icons.add_circle_outline,
-                color: Colors.orangeAccent,
-                onTap: () => Navigator.push(
-                  context, 
-                  MaterialPageRoute(builder: (_) => AddCycleScreen())
-                ),
-              ),
+              // Removed List My Cycle Card (Moed to FAB)
+
+              // CARD 2: EXPLORE DESTINATIONS
 
               SizedBox(height: 24),
 
