@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:convert'; // Import for Base64 decoding
 
 class ExploreScreen extends StatelessWidget {
   @override
@@ -23,11 +24,17 @@ class ExploreScreen extends StatelessWidget {
   }
 
   Widget _buildDestinationCard(BuildContext context) {
-    // Placeholder images - User should replace these with actual asset paths or URLs
+    // PLACEHOLDER BASE64 STRINGS
+    // TODO: Replace these strings with your actual Base64 image data.
+    // user provided images in chat, but they must be manually converted to base64 strings
+    
+    // Simple grey placeholder pattern (1x1 pixel extended)
+    const String placeholderBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=";
+
     final List<String> imgList = [
-      'https://lh5.googleusercontent.com/p/AF1QipMKjYkKo7o0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0', // Lake view
-      'https://lh5.googleusercontent.com/p/AF1QipN3-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0', // Sunset
-      'https://lh5.googleusercontent.com/p/AF1QipO-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0', // Road
+      placeholderBase64,
+      placeholderBase64,
+      placeholderBase64,
     ];
 
     return GestureDetector(
@@ -38,7 +45,7 @@ class ExploreScreen extends StatelessWidget {
           borderRadius: BorderRadius.circular(24),
           boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 10, offset: Offset(0, 5))],
         ),
-        clipBehavior: Clip.antiAlias, // Clips the image to border radius
+        clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -46,7 +53,7 @@ class ExploreScreen extends StatelessWidget {
             CarouselSlider(
               options: CarouselOptions(
                 height: 200.0,
-                viewportFraction: 1.0, // Full width
+                viewportFraction: 1.0, 
                 enableInfiniteScroll: true,
                 autoPlay: true,
               ),
@@ -56,12 +63,19 @@ class ExploreScreen extends StatelessWidget {
                     return Container(
                       width: MediaQuery.of(context).size.width,
                       decoration: BoxDecoration(color: Colors.grey),
-                      child: Image.network(
-                        i,
+                      child: Image.memory( // Changed to Image.memory
+                        base64Decode(i),
                         fit: BoxFit.cover,
                         errorBuilder: (c, e, s) => Center(
-                          child: Icon(Icons.image, size: 50, color: Colors.white24)
-                        ), // Fallback
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.broken_image, size: 50, color: Colors.white24),
+                              SizedBox(height: 8),
+                              Text("Invalid Base64", style: TextStyle(color: Colors.white24, fontSize: 10))
+                            ],
+                          )
+                        ),
                       ),
                     );
                   },
