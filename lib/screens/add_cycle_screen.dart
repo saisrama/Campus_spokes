@@ -113,6 +113,45 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
       return;
     }
 
+    // SHOW CONFIRMATION DIALOG
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Confirm Details"),
+        content: SingleChildScrollView(
+          child: ListBody(
+            children: [
+              Text("Model: $modelName"),
+              Text("Location: $location"),
+              Text("Phone: $ownerPhone"),
+              Text("UPI: $upiId"),
+              SizedBox(height: 10),
+              Text("Base Price: ₹$basePrice"),
+              Text("Hourly Price: ₹$hourlyPrice"),
+              SizedBox(height: 10),
+              Text("Is everything correct?", style: TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context), // Cancel
+            child: Text("Edit", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              _uploadAndSave(); // Proceed to upload
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+            child: Text("Confirm & List", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _uploadAndSave() async {
     setState(() => _isUploading = true);
 
     try {
@@ -272,7 +311,8 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
                   prefixIcon: Icon(Icons.phone, color: Colors.blue),
                 ),
                 keyboardType: TextInputType.phone,
-                validator: (v) => v!.length < 10 ? "Enter valid phone number" : null,
+                maxLength: 10,
+                validator: (v) => v!.length != 10 ? "Must be exactly 10 digits" : null,
                 onSaved: (v) => ownerPhone = v!,
               ),
               SizedBox(height: 15),
