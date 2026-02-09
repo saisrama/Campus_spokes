@@ -28,6 +28,7 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
   String roomNumber = '';
   String gearType = 'Single Geared'; 
   bool _isUploading = false;
+  bool _acceptedTerms = false; // T&C State
   
   final List<String> _gearOptions = ["Single Geared", "Geared"];
 
@@ -101,6 +102,17 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
       return;
     }
 
+    // VALIDATION: Terms & Conditions
+    if (!_acceptedTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("You must accept the Terms and Conditions to list your cycle."),
+          backgroundColor: Colors.red,
+        )
+      );
+      return;
+    }
+
     setState(() => _isUploading = true);
 
     try {
@@ -151,6 +163,31 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
+  }
+
+  void _showTermsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Owner Terms & Conditions"),
+        content: SingleChildScrollView(
+          child: Text(
+            "1. You confirm that you are the verified owner of this cycle.\n"
+            "2. You agree to maintain the cycle in good working condition.\n"
+            "3. You create this listing at your own risk. Campus Spokes acts only as a connector.\n"
+            "4. You responsible for verifying the cycle condition after each ride.\n"
+            "5. Any disputes regarding damage are to be resolved directly with the renter.\n"
+            "6. Incorrect or misleading information may lead to account suspension."
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Close"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -274,7 +311,7 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
                       initialValue: basePrice.toString(),
                       validator: (v) {
                         int? p = int.tryParse(v!);
-                        if (p == null || p < 20 || p > 40) return "20-40 only";
+                        if (p == null || p < 10 || p > 50) return "10-50 only";
                         return null;
                       },
                       onSaved: (v) => basePrice = int.parse(v!),
@@ -288,7 +325,7 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
                       initialValue: hourlyPrice.toString(),
                       validator: (v) {
                         int? p = int.tryParse(v!);
-                        if (p == null || p < 7 || p > 15) return "7-15 only";
+                        if (p == null || p < 7 || p > 20) return "7-20 only";
                         return null;
                       },
                       onSaved: (v) => hourlyPrice = int.parse(v!),
@@ -304,6 +341,25 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
                 items: ["VK Back Gate", "Mess 2", "VM Cycle Parking", "Mess 1", "Ganga/Meera Parking"]
                     .map((l) => DropdownMenuItem(value: l, child: Text(l))).toList(),
                 onChanged: (v) => setState(() => location = v!),
+              ),
+
+              SizedBox(height: 15),
+
+              // TERMS & CONDITIONS CHECKBOX
+              CheckboxListTile(
+                value: _acceptedTerms,
+                onChanged: (val) => setState(() => _acceptedTerms = val!),
+                title: Text("I accept the Terms and Conditions", style: TextStyle(fontSize: 14)),
+                subtitle: GestureDetector(
+                  onTap: _showTermsDialog,
+                  child: Text(
+                    "Read Owner T&C",
+                    style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline),
+                  ),
+                ),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                activeColor: Colors.blue,
               ),
 
               SizedBox(height: 30),

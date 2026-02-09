@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'home_screen.dart';
 import 'explore_screen.dart';
+import 'add_cycle_screen.dart'; // Add import
 
 class LandingScreen extends StatelessWidget {
   @override
@@ -48,7 +49,21 @@ class LandingScreen extends StatelessWidget {
 
               SizedBox(height: 24), // Spacing between cards
 
-              // CARD 2: EXPLORE DESTINATIONS
+              // CARD 2: LIST MY CYCLE (New)
+              _buildLandingCard(
+                context,
+                title: "List my cycle",
+                icon: Icons.add_circle_outline,
+                color: Colors.orangeAccent,
+                onTap: () => Navigator.push(
+                  context, 
+                  MaterialPageRoute(builder: (_) => AddCycleScreen())
+                ),
+              ),
+
+              SizedBox(height: 24),
+
+              // CARD 3: EXPLORE DESTINATIONS
               _buildLandingCard(
                 context,
                 title: "Explore destinations from campus",
