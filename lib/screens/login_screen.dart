@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'home_screen.dart';
 import 'profile_setup_screen.dart';
+import 'landing_screen.dart'; // Add import
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -69,9 +70,13 @@ class _LoginScreenState extends State<LoginScreen> {
            }
         }
 
+
+
+// ...
+
         if (isProfileComplete) {
-          // Profile exists and has data -> Go Home
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomeScreen()));
+          // Profile exists and has data -> Go to Landing Screen
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => LandingScreen()));
         } else {
           // New User or Incomplete Profile -> Go to Setup
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => ProfileSetupScreen()));

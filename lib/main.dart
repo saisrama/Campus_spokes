@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:campuspks/screens/login_screen.dart';
 import 'package:campuspks/screens/home_screen.dart';
 import 'package:flutter/foundation.dart'; // For kIsWeb
+import 'package:campuspks/screens/landing_screen.dart'; // Add import
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,8 +68,12 @@ class MyApp extends StatelessWidget {
               ),
             );
           }
+
+
+// ...
+
           if (snapshot.hasData) {
-            return HomeScreen();
+            return LandingScreen();
           }
           return LoginScreen();
         },
