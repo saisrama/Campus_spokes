@@ -39,7 +39,7 @@ class EateriesScreen extends StatelessWidget {
             titleFontSize: 18, // Reduced font size to prevent clash with distance badge
             distance: "3.7 kms",
             images: [eateryUdupi],
-            description: "Known for its authentic South Indian vegetarian cuisine, offering a variety of dossas, idlis, and thalis. A perfect spot for a quick and delicious breakfast or lunch.",
+            description: "Known for its authentic South Indian vegetarian cuisine, offering a variety of dosas, idlis, and thalis. A perfect spot for a quick and delicious breakfast or lunch.",
             duration: "Recommended Rental Duration: 2 hrs",
             priceInfo: "Price for two: ~₹200", // User updated this previously
             mapLink: "https://maps.app.goo.gl/81WFt2yXqjDjbgbm6",
@@ -138,41 +138,46 @@ class EateriesScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // SLIDESHOW
-            CarouselSlider(
-              options: CarouselOptions(
+            // IMAGE DISPLAY (Carousel vs Single)
+            if (images.length > 1) 
+              CarouselSlider(
+                options: CarouselOptions(
+                  height: 200.0,
+                  viewportFraction: 1.0, 
+                  enableInfiniteScroll: true,
+                  autoPlay: true,
+                ),
+                items: images.map((i) {
+                  return Builder(
+                    builder: (BuildContext context) {
+                      return Container(
+                        width: MediaQuery.of(context).size.width,
+                        decoration: BoxDecoration(color: Colors.black),
+                        child: i.isNotEmpty 
+                          ? Image.memory(
+                              base64Decode(i),
+                              fit: BoxFit.cover,
+                              errorBuilder: (c, e, s) => Center(child: Icon(Icons.broken_image, size: 50, color: Colors.white24)),
+                            )
+                          : Center(child: Icon(Icons.image_not_supported, color: Colors.white24, size: 50)),
+                      );
+                    },
+                  );
+                }).toList(),
+              )
+            else 
+              Container(
                 height: 200.0,
-                viewportFraction: 1.0, 
-                enableInfiniteScroll: true,
-                autoPlay: true,
+                width: double.infinity,
+                decoration: BoxDecoration(color: Colors.black),
+                child: images.isNotEmpty && images.first.isNotEmpty
+                  ? Image.memory(
+                      base64Decode(images.first),
+                      fit: BoxFit.cover,
+                      errorBuilder: (c, e, s) => Center(child: Icon(Icons.broken_image, size: 50, color: Colors.white24)),
+                    )
+                  : Center(child: Icon(Icons.image_not_supported, color: Colors.white24, size: 50)),
               ),
-              items: images.map((i) {
-                return Builder(
-                  builder: (BuildContext context) {
-                    return Container(
-                      width: MediaQuery.of(context).size.width,
-                      decoration: BoxDecoration(color: Colors.black),
-                      child: i.isNotEmpty 
-                        ? Image.memory(
-                            base64Decode(i),
-                            fit: BoxFit.cover,
-                            errorBuilder: (c, e, s) => Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.broken_image, size: 50, color: Colors.white24),
-                                  SizedBox(height: 8),
-                                  Text("Invalid Base64", style: TextStyle(color: Colors.white24, fontSize: 10))
-                                ],
-                              )
-                            ),
-                          )
-                        : Center(child: Icon(Icons.image_not_supported, color: Colors.white24, size: 50)),
-                    );
-                  },
-                );
-              }).toList(),
-            ),
 
             // DETAILS
             Padding(

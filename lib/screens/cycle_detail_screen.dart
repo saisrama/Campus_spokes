@@ -34,6 +34,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
   DateTime? _rideStartTime;
   DateTime? _scheduledStartTime;
   DateTime? _scheduledEndTime;
+  bool _isNoShow = false;
 
   @override
   void initState() {
@@ -68,34 +69,227 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
 
     if (query.docs.isNotEmpty) {
       var doc = query.docs.first;
+      var data = doc.data();
+      String status = data['status'];
+      bool isNoShowDoc = data['isNoShow'] ?? false;
+      
+      DateTime? startTimeStamp;
+      DateTime? scheduledStartX;
+      DateTime? scheduledEndX;
+      
+      if (data['startTime'] != null) startTimeStamp = (data['startTime'] as Timestamp).toDate();
+      
+      if (data.containsKey('scheduledStartTime')) {
+          scheduledStartX = (data['scheduledStartTime'] as Timestamp).toDate();
+      }
+      if (data.containsKey('scheduledEndTime')) {
+          scheduledEndX = (data['scheduledEndTime'] as Timestamp).toDate();
+      }
+
+      // 3. NO-SHOW CHECK
+      // If status is 'booked' (not started) AND Time > Scheduled End Time
+      if (status == 'booked' && scheduledEndX != null && DateTime.now().isAfter(scheduledEndX)) {
+          // Perform async update outside setState
+          
+          // 1. Update Booking
+          await doc.reference.update({
+             'status': 'payment_pending',
+             'isNoShow': true,
+             'endTime': scheduledEndX,
+          });
+          
+          // 2. Release Cycle IMMEDIATELY (No buffer needed since they didn't show up)
+          await FirebaseFirestore.instance.collection('cycles').doc(widget.cycleId).update({
+             'isAvailable': true,
+             'nextAvailableTime': FieldValue.serverTimestamp(), 
+          });
+          
+          status = 'payment_pending';
+          isNoShowDoc = true;
+          
+          if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text("Booking Expired (No Show). Please pay for the reserved slot."),
+                backgroundColor: Colors.orangeAccent,
+                duration: Duration(seconds: 5),
+              ));
+          }
+      }
+
+      if (!mounted) return;
+
       setState(() {
         _bookingId = doc.id;
-        _bookingStatus = doc['status'];
-        if (doc['status'] == 'started' && doc['startTime'] != null) {
-           _rideStartTime = (doc['startTime'] as Timestamp).toDate();
-        }
+        _bookingStatus = status;
+        _isNoShow = isNoShowDoc;
         
-        // Fetch Scheduled Times from booking doc (if available)
-        if (doc.data().containsKey('scheduledStartTime')) {
-           _scheduledStartTime = (doc['scheduledStartTime'] as Timestamp).toDate();
-           _scheduledEndTime = (doc['scheduledEndTime'] as Timestamp).toDate();
-           
-           // Update UI TimeOfDay to match scheduled if we re-loaded state
-           if (_scheduledStartTime != null) _startTime = TimeOfDay.fromDateTime(_scheduledStartTime!);
-           if (_scheduledEndTime != null) _endTime = TimeOfDay.fromDateTime(_scheduledEndTime!);
-        }
+        if (startTimeStamp != null) _rideStartTime = startTimeStamp;
         
-        // If owner approved return, show payment immediately
-        if (doc['status'] == 'payment_pending') {
-           _rideStartTime = (doc['startTime'] as Timestamp).toDate(); // Ensure we have start time
-           _calculateFinalCostAndShowPayment();
+        _scheduledStartTime = scheduledStartX;
+        _scheduledEndTime = scheduledEndX;
+        
+        if (_scheduledStartTime != null) _startTime = TimeOfDay.fromDateTime(_scheduledStartTime!);
+        if (_scheduledEndTime != null) _endTime = TimeOfDay.fromDateTime(_scheduledEndTime!);
+        
+        // Ensure _rideStartTime is set for payment if missing (No Show case)
+        if (status == 'payment_pending') {
+           if (_rideStartTime == null && _scheduledStartTime != null) _rideStartTime = _scheduledStartTime;
         }
       });
+      
+      // Calculate Cost can be called after setState
+      if (status == 'payment_pending') {
+          _calculateFinalCostAndShowPayment();
+      }
     }
+
+    /* 
+    4. NO-SHOW CHECK (Client Side Polling? Or simple check on load)
+    We handled it above for the Active User.
+    What if the user opens the app 5 hours later? The above check runs on init.
+    */
+  }
+
+  // ... (existing methods) ...
+
+  void _calculateFinalCostAndShowPayment() {
+    // If _rideStartTime is null (e.g. app restart), fetch it or handle error. 
+    // User requested "Reserved Time Start" -> Prioritize _scheduledStartTime
+    DateTime startTime = _scheduledStartTime ?? _rideStartTime ?? DateTime.now(); 
+    DateTime actualEndTime = DateTime.now();
+
+    // 1. Calculate Base Duration (Scheduled)
+    
+    DateTime scheduledEnd = _scheduledEndTime ?? actualEndTime;
+    
+    // Duration actually used
+    final duration = actualEndTime.difference(startTime);
+    final double durationInHours = duration.inMinutes / 60.0;
+    
+    int basePrice = widget.data['basePrice'] ?? 20;
+    int hourlyPrice = widget.data['hourlyPrice'] ?? 10;
+    
+    double finalCost = 0;
+    bool isLate = false;
+    double lateFee = 0;
+
+    // 2. Base Cost Calculation
+    
+    // Calculate Scheduled Cost
+    double scheduledDurationHrs = 2.0;
+    if (_scheduledStartTime != null && _scheduledEndTime != null) {
+       scheduledDurationHrs = _scheduledEndTime!.difference(_scheduledStartTime!).inMinutes / 60.0;
+    }
+    
+    double scheduledCost = basePrice.toDouble();
+    if (scheduledDurationHrs > 2) {
+       scheduledCost += ((scheduledDurationHrs - 2).ceil() * hourlyPrice);
+    }
+    
+    // NO-SHOW LOGIC: If No Show, Pay Scheduled Cost ONLY. No Late Fees.
+    if (_isNoShow) {
+        finalCost = scheduledCost;
+        // Proceed to show dialog
+        _showEndRideDialog(finalCost, scheduledDurationHrs, false, 0);
+        return;
+    }
+
+    // 3. Strict Late Fee Logic (Only if NOT a No-Show)
+    if (actualEndTime.isAfter(scheduledEnd)) {
+      isLate = true;
+      
+      // Calculate Late Duration
+      Duration lateDuration = actualEndTime.difference(scheduledEnd);
+      double lateHours = lateDuration.inMinutes / 60.0;
+      
+      // Charge for every started hour late
+      double lateHoursCeil = lateHours.ceilToDouble();
+      if (lateHoursCeil < 1) lateHoursCeil = 1; 
+      
+      // Rate: 2x Hourly Price
+      lateFee = lateHoursCeil * (hourlyPrice * 2);
+    }
+    
+    finalCost = scheduledCost + lateFee;
+
+    _showEndRideDialog(finalCost, durationInHours, isLate, lateFee);
+  }
+
+  void _showEndRideDialog(double cost, double durationHrs, bool isLate, double lateFee) {
+    DateTime startTime = _rideStartTime ?? DateTime.now().subtract(Duration(minutes: (durationHrs * 60).round()));
+    DateTime endTime = DateTime.now();
+    
+    // For No-Show, show specific details
+    String title = "End Ride & Pay";
+    if (_isNoShow) {
+        title = "No Show - Pay Reserved Slot";
+        endTime = _scheduledEndTime ?? endTime; // Show scheduled end time
+    }
+
+    double baseCost = cost - lateFee;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Color(0xFF1E1E1E),
+        title: Text(title, style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Time Breakdown
+            _buildDialogRow("Start Time", DateFormat('hh:mm a').format(startTime)),
+            _buildDialogRow("End Time", DateFormat('hh:mm a').format(endTime)),
+            _buildDialogRow("Total Duration", "${durationHrs.toStringAsFixed(1)} hrs"),
+            Divider(color: Colors.white24),
+            
+            if (_isNoShow) ...[
+                 Text("You did not start the ride on time.", style: TextStyle(color: Colors.orangeAccent, fontSize: 12)),
+                 Text("Please pay for the reserved slot.", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                 SizedBox(height: 10),
+            ] else ...[
+                // Cost Breakdown
+                _buildDialogRow("Base Cost", "₹${baseCost.toStringAsFixed(0)}"),
+                if (isLate) ...[
+                   _buildDialogRow("Late Fee (2x)", "+₹${lateFee.toStringAsFixed(0)}", valueColor: Colors.redAccent),
+                   SizedBox(height: 5),
+                   Text(
+                     "Late Return Detected! You exceeded the scheduled time.", 
+                     style: TextStyle(color: Colors.redAccent, fontSize: 10)
+                   ),
+                ],
+            ],
+            Divider(color: Colors.white24),
+            
+            // Total
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text("Total To Pay", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                  Text("₹${cost.toStringAsFixed(0)}", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.green)),
+                ],
+              ),
+            )
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.white),
+            onPressed: () {
+              Navigator.pop(context);
+              _launchUPI(cost, onSuccess: () => _showRatingDialog(cost));
+            },
+            child: Text("PAY NOW", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          )
+        ],
+      ),
+    );
   }
 
   Future<bool> _validateBookingSlot({required TimeOfDay start, required TimeOfDay end}) async {
-    // 1. Validate Past Time
     DateTime now = DateTime.now();
     // Truncate seconds for cleaner comparison
     DateTime nowDateTime = DateTime(now.year, now.month, now.day, now.hour, now.minute);
@@ -316,6 +510,18 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         }
       }
       
+      // Enforce Expiry (Cannot start after Scheduled End)
+      if (_scheduledEndTime != null) {
+        if (DateTime.now().isAfter(_scheduledEndTime!)) {
+           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+             content: Text("Booking Expired! You cannot start the ride after your scheduled end time (${_endTime.format(context)})."),
+             backgroundColor: Colors.redAccent,
+             duration: Duration(seconds: 4),
+           ));
+           return;
+        }
+      }
+      
        _showTermsAndConditionsDialog();
 
     } else if (_bookingStatus == 'started') {
@@ -480,107 +686,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
      );
   }
 
-  void _calculateFinalCostAndShowPayment() {
-    // If _rideStartTime is null (e.g. app restart), fetch it or handle error. 
-    DateTime startTime = _rideStartTime ?? DateTime.now(); // Fallback
-    
-    // We need the original planned end time to determine "Late". 
-    // Since we didn't strictly save "Planned End Time" in the 'started' state update previously, 
-    // we will fetch the 'createdAt' and 'basePrice' logic or rely on the booking doc if we saved it.
-    // For this implementation, we will fetch the booking doc to be precise if needed, 
-    // but to avoid async complexity here, we'll re-implement a robust cost logic.
-    
-    // FETCH BOOKING TO GET PLANNED DURATION (We need to save this in _createBooking to be accurate)
-    // For now, let's assume the 'standard' booking is 2 hours. Anything above 2 hours is "extra/late".
-    // OR: Use 2x for ALL extra time beyond base 2 hours.
-    
-    final duration = DateTime.now().difference(startTime);
-    final double durationInHours = duration.inMinutes / 60.0;
-    
-    int basePrice = widget.data['basePrice'] ?? 20;
-    int hourlyPrice = widget.data['hourlyPrice'] ?? 10;
-    double finalCost = 0;
-    bool isLate = false;
-    double lateFee = 0;
 
-    if (durationInHours <= 2) {
-      finalCost = basePrice.toDouble();
-    } else {
-      // User exceeded the 2 hour base slot.
-      // Apply 2x Late Fee for every extra hour
-      double extraHours = durationInHours - 2;
-      double extraHoursCeil = extraHours.ceilToDouble();
-      
-      // LATE FEE: 2x Standard Hourly Price
-      double feePerHour = hourlyPrice * 2.0; 
-      
-      lateFee = extraHoursCeil * feePerHour;
-      finalCost = basePrice + lateFee;
-      isLate = true;
-    }
-
-    _showEndRideDialog(finalCost, durationInHours, isLate, lateFee);
-  }
-
-  void _showEndRideDialog(double cost, double durationHrs, bool isLate, double lateFee) {
-    DateTime startTime = _rideStartTime ?? DateTime.now().subtract(Duration(minutes: (durationHrs * 60).round()));
-    DateTime endTime = DateTime.now();
-    double baseCost = cost - lateFee;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: Color(0xFF1E1E1E),
-        title: Text("End Ride & Pay", style: TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Time Breakdown
-            _buildDialogRow("Start Time", DateFormat('hh:mm a').format(startTime)),
-            _buildDialogRow("End Time", DateFormat('hh:mm a').format(endTime)),
-            _buildDialogRow("Total Duration", "${durationHrs.toStringAsFixed(1)} hrs"),
-            Divider(color: Colors.white24),
-            
-            // Cost Breakdown
-            _buildDialogRow("Base Cost", "₹${baseCost.toStringAsFixed(0)}"),
-            if (isLate) ...[
-               _buildDialogRow("Late Fee (2x)", "+₹${lateFee.toStringAsFixed(0)}", valueColor: Colors.redAccent),
-               SizedBox(height: 5),
-               Text(
-                 "Late Return Detected! You exceeded the 2hr base slot.", 
-                 style: TextStyle(color: Colors.redAccent, fontSize: 10)
-               ),
-            ],
-            Divider(color: Colors.white24),
-            
-            // Total
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text("Total To Pay", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-                  Text("₹${cost.toStringAsFixed(0)}", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.green)),
-                ],
-              ),
-            )
-          ],
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.white),
-            onPressed: () {
-              Navigator.pop(context);
-              _launchUPI(cost, onSuccess: () => _showRatingDialog(cost));
-            },
-            child: Text("PAY NOW", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-          )
-        ],
-      ),
-    );
-  }
 
   Widget _buildDialogRow(String label, String value, {Color valueColor = Colors.white}) {
     return Padding(
@@ -615,7 +721,8 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                  _buildTermItem("2. No Liability", "Campus Spokes is NOT responsible for any accidents, injuries, or damages caused to the rider, third parties, or property during the ride."),
                  _buildTermItem("3. Prohibited Use", "Using the cycle/app for illegal, illicit, or unauthorized purposes is strictly prohibited. Users found misusing the platform will be banned."),
                  _buildTermItem("4. Dispute Resolution", "Any disputes regarding cycle condition, payments, or damages must be resolved directly between the Owner and the Renter. Campus Spokes will not mediate financial or physical disputes."),
-                 _buildTermItem("5. Safety", "Riders are advised to follow traffic rules and ride responsibly. Currently, we do not provide insurance cover."),
+                 _buildTermItem("5. STRICT No-Show Policy", "If you fail to start the ride by the scheduled end time, your booking will expire. You will be charged the FULL reserved amount (no late fees). The cycle will be immediately released for other users."),
+                 _buildTermItem("6. Safety", "Riders are advised to follow traffic rules and ride responsibly. Currently, we do not provide insurance cover."),
                  SizedBox(height: 10),
                  Text("By clicking 'Accept & Start', you acknowledge that you have read and agreed to these terms.", style: TextStyle(color: Colors.white70, fontSize: 11, fontStyle: FontStyle.italic)),
               ],
@@ -1177,6 +1284,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
               children: [
                  Text("Disclaimer & Policy", style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
                  SizedBox(height: 4),
+                 Text("• No-Show: Failure to start ride by end time results in full charge of reserved slot.", style: TextStyle(color: Colors.white38, fontSize: 9)),
                  Text("• Late Returns: Charged at 2x the hourly rate for delays beyond the booked slot.", style: TextStyle(color: Colors.white38, fontSize: 9)),
                  Text("• Liability: Campus Spokes facilitates connections only. We are not responsible for accidents, damages, or disputes.", style: TextStyle(color: Colors.white38, fontSize: 9)),
                  Text("• Disputes: All financial or physical disputes must be resolved directly between Owner and Renter.", style: TextStyle(color: Colors.white38, fontSize: 9)),

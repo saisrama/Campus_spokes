@@ -56,6 +56,16 @@ class CycleHistoryScreen extends StatelessWidget {
               Timestamp? endTime = booking['endTime'];
               double cost = (booking['finalCost'] ?? 0).toDouble();
 
+              // NO-SHOW Handling
+              bool isNoShow = booking['isNoShow'] ?? false;
+              String statusLabel = isOngoing ? "ONGOING RIDE" : "COMPLETED";
+              Color labelColor = isOngoing ? Colors.blue : Colors.green;
+              
+              if (isNoShow) {
+                 statusLabel = "NO SHOW";
+                 labelColor = Colors.redAccent;
+              }
+
               return Card(
                 color: isOngoing ? Colors.blue.withOpacity(0.1) : Color(0xFF1E1E1E),
                 margin: EdgeInsets.only(bottom: 16),
@@ -75,11 +85,11 @@ class CycleHistoryScreen extends StatelessWidget {
                           Container(
                             padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: isOngoing ? Colors.blue : Colors.green,
+                              color: labelColor,
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              isOngoing ? "ONGOING RIDE" : "COMPLETED",
+                              statusLabel,
                               style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                             ),
                           ),

@@ -14,13 +14,42 @@
       },
       "oauth_client": [
         {
-          "client_id": "960573537207-rkup94dn14fqm3eittnr64u31cu5uulv.apps.googleusercontent.com",
+          "client_id": "960573537207-tnsque9vttt8aci6143sjj3cb873n0vp.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.example.campuspks",
-            "certificate_hash": "6aac8a2aa81c21bee73b799ed442b355eed57274"
+            "certificate_hash": "da44136172e756e93b7955b2c8817305c833393c"
           }
         },
+        {
+          "client_id": "960573537207-r7k8i6sh833gupogpfc5cg3afm6julu0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBuGmVxSZr3ym5BhgycXWyUs0ycWTwwA1Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "960573537207-r7k8i6sh833gupogpfc5cg3afm6julu0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:960573537207:android:91e36dc4eb750247824632",
+        "android_client_info": {
+          "package_name": "com.sreerama.campuspks"
+        }
+      },
+      "oauth_client": [
         {
           "client_id": "960573537207-r7k8i6sh833gupogpfc5cg3afm6julu0.apps.googleusercontent.com",
           "client_type": 3

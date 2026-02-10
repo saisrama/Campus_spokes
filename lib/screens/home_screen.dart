@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'landing_screen.dart'; // Added import
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -147,6 +148,10 @@ class _HomeScreenState extends State<HomeScreen> {
       // APP BAR
       appBar: AppBar(
         automaticallyImplyLeading: false,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => LandingScreen())),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -511,6 +516,30 @@ class _HomeScreenState extends State<HomeScreen> {
     Map<String, dynamic> data = booking['cycleData'];
     String status = booking['status'];
     String cycleId = booking['cycleId'];
+    bool isNoShow = booking.data().toString().contains('isNoShow') ? (booking['isNoShow'] ?? false) : false;
+
+    // Determine Display Status and Color
+    String displayStatus = status.toUpperCase();
+    Color statusColor = Colors.amber;
+    String buttonText = "START RIDE";
+    Color buttonColor = Colors.green;
+    
+    if (status == 'started') {
+      statusColor = Colors.green;
+      buttonText = "END RIDE";
+      buttonColor = Colors.red;
+    } else if (status == 'payment_pending') {
+      statusColor = Colors.green;
+      buttonText = "PAY NOW";
+      buttonColor = Colors.green;
+      
+      if (isNoShow) {
+        displayStatus = "NO SHOW - PAY NOW";
+        statusColor = Colors.redAccent;
+        buttonText = "PAY RESERVED SLOT";
+        buttonColor = Colors.redAccent;
+      }
+    }
 
     return Container(
       width: double.infinity,
@@ -519,7 +548,7 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         gradient: LinearGradient(colors: [Color(0xFF2C2C2C), Color(0xFF1E1E1E)]),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: status == 'started' ? Colors.green : Colors.amber, width: 2)
+        border: Border.all(color: statusColor, width: 2)
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -527,11 +556,11 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("ACTIVE RIDE", style: TextStyle(color: status == 'started' ? Colors.green : Colors.amber, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+              Text("ACTIVE RIDE", style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
               Container(
                 padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8)),
-                child: Text(status.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Text(displayStatus, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
               )
             ],
           ),
@@ -559,16 +588,14 @@ class _HomeScreenState extends State<HomeScreen> {
             width: double.infinity,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: status == 'started' ? Colors.red : 
-                              (status == 'payment_pending' ? Colors.green : Colors.green),
+                backgroundColor: buttonColor,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
               ),
               onPressed: () {
                 Navigator.push(context, MaterialPageRoute(builder: (_) => CycleDetailScreen(data: data, cycleId: cycleId)));
               },
               child: Text(
-                status == 'started' ? "END RIDE" : 
-                (status == 'payment_pending' ? "PAY NOW" : "START RIDE"), 
+                buttonText, 
                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
               ),
             ),

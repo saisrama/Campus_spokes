@@ -5,8 +5,7 @@ import 'explore_screen.dart';
 import 'add_cycle_screen.dart'; // Add import
 
 import 'package:firebase_auth/firebase_auth.dart'; // Add import
-import 'profile_screen.dart'; // Add import
-import 'add_cycle_screen.dart'; 
+import 'profile_screen.dart'; // Add import 
 
 class LandingScreen extends StatelessWidget {
   final User? user = FirebaseAuth.instance.currentUser; // Get User

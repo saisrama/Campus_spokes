@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -33,7 +34,7 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
   final List<String> _gearOptions = ["Single Geared", "Geared"];
 
   // Image Logic
-  File? _imageFile;
+  XFile? _pickedFile;
   final picker = ImagePicker();
   // Using a more reliable placeholder service or empty string
   // Using a more reliable placeholder service or empty string
@@ -66,17 +67,18 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
     
     if (pickedFile != null) {
       setState(() {
-        _imageFile = File(pickedFile.path);
+        _pickedFile = pickedFile;
       });
     }
   }
 
   Future<String> _uploadImage() async {
-    if (_imageFile == null) return _uploadedImageUrl;
+    if (_pickedFile == null) return _uploadedImageUrl;
     
     try {
       // CONVERT TO BASE64
-      List<int> imageBytes = await _imageFile!.readAsBytes();
+      // readAsBytes works on both Web (bytes) and Mobile (file)
+      List<int> imageBytes = await _pickedFile!.readAsBytes();
       String base64Image = base64Encode(imageBytes);
       print("Base64 String Length: ${base64Image.length}");
       return base64Image;
@@ -92,7 +94,7 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
     _formKey.currentState!.save();
 
     // VALIDATION: Check if image is provided
-    if (_imageFile == null && (_uploadedImageUrl.isEmpty || !_uploadedImageUrl.startsWith('http') && _uploadedImageUrl.isEmpty)) {
+    if (_pickedFile == null && (_uploadedImageUrl.isEmpty || !_uploadedImageUrl.startsWith('http') && _uploadedImageUrl.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Please upload an image of your cycle."),
@@ -250,15 +252,20 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
                     color: Colors.grey[900],
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.grey[700]!),
-                    image: _imageFile != null 
-                      ? DecorationImage(image: FileImage(_imageFile!), fit: BoxFit.cover)
+                    image: _pickedFile != null 
+                      ? DecorationImage(
+                          image: kIsWeb 
+                            ? NetworkImage(_pickedFile!.path) // Web: Blob URL
+                            : FileImage(File(_pickedFile!.path)) as ImageProvider, // Mobile: File path
+                          fit: BoxFit.cover
+                        )
                       : (_uploadedImageUrl.startsWith('http') 
                           ? DecorationImage(image: NetworkImage(_uploadedImageUrl), fit: BoxFit.cover)
                           : (_uploadedImageUrl.isNotEmpty 
                               ? DecorationImage(image: MemoryImage(base64Decode(_uploadedImageUrl)), fit: BoxFit.cover)
                               : null))
                   ),
-                  child: _imageFile == null && !_uploadedImageUrl.startsWith('http') && _uploadedImageUrl.isEmpty
+                  child: _pickedFile == null && !_uploadedImageUrl.startsWith('http') && _uploadedImageUrl.isEmpty
                     ? Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
