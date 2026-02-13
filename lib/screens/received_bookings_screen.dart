@@ -15,7 +15,7 @@ class ReceivedBookingsScreen extends StatelessWidget {
         stream: FirebaseFirestore.instance
             .collection('bookings')
             .where('ownerId', isEqualTo: user?.uid)
-            .where('status', whereIn: ['booked', 'started', 'payment_pending', 'cancelled'])
+            .where('status', whereIn: ['booked', 'started', 'payment_pending', 'cancelled', 'owner_cancelled'])
             .orderBy('createdAt', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
@@ -123,6 +123,7 @@ class ReceivedBookingsScreen extends StatelessWidget {
     if (status == 'booked') return Icons.bookmark;
     if (status == 'payment_pending') return Icons.payment;
     if (status == 'cancelled') return Icons.cancel;
+    if (status == 'owner_cancelled') return Icons.cancel_outlined;
     return Icons.help;
   }
 
@@ -132,6 +133,7 @@ class ReceivedBookingsScreen extends StatelessWidget {
     if (status == 'booked') return Colors.orange;
     if (status == 'payment_pending') return Colors.amber;
     if (status == 'cancelled') return Colors.red;
+    if (status == 'owner_cancelled') return Colors.deepOrange;
     return Colors.grey;
   }
 }

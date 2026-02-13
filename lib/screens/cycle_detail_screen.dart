@@ -8,8 +8,8 @@ import 'package:intl/intl.dart';
 class CycleDetailScreen extends StatefulWidget {
   final Map<String, dynamic> data;
   final String cycleId;
-  final TimeOfDay? initialStartTime;
-  final TimeOfDay? initialEndTime;
+  final DateTime? initialStartTime;
+  final DateTime? initialEndTime;
 
   CycleDetailScreen({
     required this.data, 
@@ -23,14 +23,14 @@ class CycleDetailScreen extends StatefulWidget {
 }
 
 class _CycleDetailScreenState extends State<CycleDetailScreen> {
-  TimeOfDay _startTime = TimeOfDay.now();
-  TimeOfDay _endTime = TimeOfDay.fromDateTime(DateTime.now().add(Duration(hours: 2)));
+  DateTime _startTime = DateTime.now();
+  DateTime _endTime = DateTime.now().add(Duration(hours: 2));
   double _totalCost = 0;
   double _durationInHours = 2.0;
 
   User? currentUser = FirebaseAuth.instance.currentUser;
   String? _bookingId;
-  String _bookingStatus = 'none'; // none, booked, started, end_requested, payment_pending, completed
+  String? _bookingStatus = 'none'; // none, booked, started, end_requested, payment_pending, completed
   DateTime? _rideStartTime;
   DateTime? _scheduledStartTime;
   DateTime? _scheduledEndTime;
@@ -39,17 +39,23 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
   @override
   void initState() {
     super.initState();
+    DateTime now = DateTime.now();
+    // Default start to next quarter hour or just now
+    _startTime = now;
+    
     if (widget.initialStartTime != null) {
        _startTime = widget.initialStartTime!;
     }
     
     if (widget.initialEndTime != null) {
        _endTime = widget.initialEndTime!;
-    } else if (widget.initialStartTime != null) {
-       // If start provided but not end, maintain 2 hour duration
-       DateTime startDt = DateTime(2024, 1, 1, _startTime.hour, _startTime.minute);
-       DateTime endDt = startDt.add(Duration(hours: 2));
-       _endTime = TimeOfDay.fromDateTime(endDt);
+       // Validation check: ensure end is after start
+       if (_endTime.isBefore(_startTime)) {
+          _endTime = _startTime.add(Duration(hours: 2));
+       }
+    } else {
+       // Default 2 hours from start
+       _endTime = _startTime.add(Duration(hours: 2));
     }
 
     _calculateCost();
@@ -98,9 +104,8 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
              'endTime': scheduledEndX,
           });
           
-          // 2. Release Cycle IMMEDIATELY (No buffer needed since they didn't show up)
+          // 2. Release Cycle — clear nextAvailableTime hint
           await FirebaseFirestore.instance.collection('cycles').doc(widget.cycleId).update({
-             'isAvailable': true,
              'nextAvailableTime': FieldValue.serverTimestamp(), 
           });
           
@@ -128,8 +133,8 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         _scheduledStartTime = scheduledStartX;
         _scheduledEndTime = scheduledEndX;
         
-        if (_scheduledStartTime != null) _startTime = TimeOfDay.fromDateTime(_scheduledStartTime!);
-        if (_scheduledEndTime != null) _endTime = TimeOfDay.fromDateTime(_scheduledEndTime!);
+        if (_scheduledStartTime != null) _startTime = _scheduledStartTime!;
+        if (_scheduledEndTime != null) _endTime = _scheduledEndTime!;
         
         // Ensure _rideStartTime is set for payment if missing (No Show case)
         if (status == 'payment_pending') {
@@ -137,7 +142,10 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         }
       });
       
-      // Calculate Cost can be called after setState
+      // ALWAYS recalculate cost after updating times from Firestore
+      _calculateCost();
+      
+      // For payment_pending, also show the payment dialog
       if (status == 'payment_pending') {
           _calculateFinalCostAndShowPayment();
       }
@@ -289,15 +297,11 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
     );
   }
 
-  Future<bool> _validateBookingSlot({required TimeOfDay start, required TimeOfDay end}) async {
+  Future<bool> _validateBookingSlot({required DateTime start, required DateTime end}) async {
     DateTime now = DateTime.now();
-    // Truncate seconds for cleaner comparison
-    DateTime nowDateTime = DateTime(now.year, now.month, now.day, now.hour, now.minute);
-    
-    DateTime startDateTime = DateTime(now.year, now.month, now.day, start.hour, start.minute);
     
     // Strict check: Start Time < Now - 1 minute (grace)
-    if (startDateTime.isBefore(nowDateTime.subtract(Duration(minutes: 1)))) {
+    if (start.isBefore(now.subtract(Duration(minutes: 1)))) {
        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
          content: Text("Start time cannot be in the past!"),
          backgroundColor: Colors.redAccent,
@@ -305,21 +309,13 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
        return false;
     }
 
-    // 2. Validate Overlap with ANY Active Booking
-    DateTime endDateTime = DateTime(now.year, now.month, now.day, end.hour, end.minute);
-    
-    // Handle day wrap
-    if (endDateTime.isBefore(startDateTime)) {
-       endDateTime = endDateTime.add(Duration(days: 1));
-    }
-
     // PROPOSED SLOT BUFFER LOGIC:
     // User wants slot [S, E]
     // Effectively occupies [S, E + 30m]
     // Condition to be valid: NO overlap with any existing [BookedS, BookedE + 30m]
     
-    DateTime myEffectiveStart = startDateTime;
-    DateTime myEffectiveEnd = endDateTime.add(Duration(minutes: 30));
+    DateTime myEffectiveStart = start;
+    DateTime myEffectiveEnd = end.add(Duration(minutes: 30));
 
     try {
       var query = await FirebaseFirestore.instance
@@ -341,9 +337,6 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
          if (bookedStart == null) continue;
          if (bookedEnd == null) bookedEnd = bookedStart.add(Duration(hours: 2)); 
          
-         // Truncate seconds from DB timestamps too for fairness
-         bookedStart = DateTime(bookedStart.year, bookedStart.month, bookedStart.day, bookedStart.hour, bookedStart.minute);
-         bookedEnd = DateTime(bookedEnd.year, bookedEnd.month, bookedEnd.day, bookedEnd.hour, bookedEnd.minute);
 
          // EXISITNG SLOT BUFFER LOGIC:
          // Occupies [BookedS, BookedE + 30m]
@@ -351,16 +344,6 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
          DateTime theirEffectiveEnd = bookedEnd.add(Duration(minutes: 30));
          
          // OVERLAP CHECK:
-         // Two intervals [A,B] and [C,D] overlap if A < D and B > C
-         // In our case:
-         // MyEffectiveStart < TheirEffectiveEnd AND MyEffectiveEnd > TheirEffectiveStart
-         
-         // Example Case:
-         // Me: End 20:15 -> MyEffectiveEnd = 20:45
-         // Them: Start 20:30 -> TheirEffectiveStart = 20:30
-         // MyEffectiveStart (say 18:15) < TheirEffectiveEnd (say 22:30?) - TRUE
-         // MyEffectiveEnd (20:45) > TheirEffectiveStart (20:30) - TRUE (OVERLAP!)
-         
          if (myEffectiveStart.isBefore(theirEffectiveEnd) && myEffectiveEnd.isAfter(theirEffectiveStart)) {
             DateTime displayBookedEndWithBuffer = bookedEnd.add(Duration(minutes: 30));
             String conflictMsg = "Gap conflict! Cycles need 30m buffer. Intersection with booking ${DateFormat('HH:mm').format(bookedStart)} - ${DateFormat('HH:mm').format(displayBookedEndWithBuffer)}";
@@ -382,9 +365,15 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
   }
 
   Future<void> _selectTime(bool isStart) async {
-    final TimeOfDay? picked = await showTimePicker(
+    DateTime initialDate = isStart ? _startTime : _endTime;
+    TimeOfDay initialTime = TimeOfDay.fromDateTime(initialDate);
+
+    // 1. Pick Date
+    final DateTime? pickedDate = await showDatePicker(
       context: context,
-      initialTime: isStart ? _startTime : _endTime,
+      initialDate: initialDate,
+      firstDate: DateTime.now().subtract(Duration(days: 1)), // Allow slightly past for testing/edge cases? Better strict.
+      lastDate: DateTime.now().add(Duration(days: 7)), // 1 Week advance booking
       builder: (context, child) => Theme(
         data: ThemeData.dark().copyWith(
           colorScheme: ColorScheme.dark(primary: Colors.white, onSurface: Colors.white),
@@ -393,28 +382,61 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
       ),
     );
 
-    if (picked != null) {
-      TimeOfDay tempStart = isStart ? picked : _startTime;
-      TimeOfDay tempEnd = isStart ? _endTime : picked;
+    if (pickedDate == null) return;
 
-      bool isValid = await _validateBookingSlot(start: tempStart, end: tempEnd);
-      
-      if (isValid) {
-        setState(() {
-          if (isStart) _startTime = picked;
-          else _endTime = picked;
-          _calculateCost();
-        });
-      }
+    // 2. Pick Time
+    final TimeOfDay? pickedTime = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      builder: (context, child) => Theme(
+        data: ThemeData.dark().copyWith(
+          colorScheme: ColorScheme.dark(primary: Colors.white, onSurface: Colors.white),
+        ),
+        child: child!,
+      ),
+    );
+
+    if (pickedTime == null) return;
+
+    // 3. Combine
+    DateTime pickedDateTime = DateTime(
+      pickedDate.year, 
+      pickedDate.month, 
+      pickedDate.day, 
+      pickedTime.hour, 
+      pickedTime.minute
+    );
+
+    DateTime tempStart = isStart ? pickedDateTime : _startTime;
+    DateTime tempEnd = isStart ? _endTime : pickedDateTime;
+
+    // Auto-adjust end if it becomes before start
+    if (isStart && tempEnd.isBefore(tempStart)) {
+       tempEnd = tempStart.add(Duration(hours: 2));
+    }
+
+    bool isValid = await _validateBookingSlot(start: tempStart, end: tempEnd);
+    
+    if (isValid) {
+      setState(() {
+        if (isStart) _startTime = tempStart;
+        else _endTime = tempEnd;
+        
+        // If we just changed start, ensure end is at least start
+        if (isStart && _endTime.isBefore(_startTime)) {
+            _endTime = _startTime.add(Duration(hours: 2));
+        }
+        
+        _calculateCost();
+      });
     }
   }
 
   void _calculateCost() {
-    double start = _startTime.hour + _startTime.minute / 60.0;
-    double end = _endTime.hour + _endTime.minute / 60.0;
-    if (end < start) end += 24; // Handle overnight
+    Duration duration = _endTime.difference(_startTime);
+    double hours = duration.inMinutes / 60.0;
 
-    _durationInHours = end - start;
+    _durationInHours = hours;
     if (_durationInHours < 0) _durationInHours = 0;
 
     int basePrice = (widget.data['basePrice'] ?? 20).toInt();
@@ -487,8 +509,8 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
           children: [
             Text("Confirm your booking details:", style: TextStyle(color: Colors.white70)),
             SizedBox(height: 10),
-            Text("Start Time: ${_startTime.format(context)}", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            Text("End Time: ${_endTime.format(context)}", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            Text("Start Time: ${DateFormat('MMM d, h:mm a').format(_startTime)}", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            Text("End Time: ${DateFormat('MMM d, h:mm a').format(_endTime)}", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             SizedBox(height: 10),
             Text("Est. Cost: ₹${_totalCost.toStringAsFixed(0)}", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
           ],
@@ -503,7 +525,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
       if (_scheduledStartTime != null) {
         if (DateTime.now().isBefore(_scheduledStartTime!)) {
            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-             content: Text("You cannot start the ride before ${_startTime.format(context)}"),
+             content: Text("You cannot start the ride before ${DateFormat('h:mm a').format(_startTime)}"),
              backgroundColor: Colors.redAccent,
            ));
            return;
@@ -514,7 +536,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
       if (_scheduledEndTime != null) {
         if (DateTime.now().isAfter(_scheduledEndTime!)) {
            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-             content: Text("Booking Expired! You cannot start the ride after your scheduled end time (${_endTime.format(context)})."),
+             content: Text("Booking Expired! You cannot start the ride after your scheduled end time (${DateFormat('h:mm a').format(_endTime)})."),
              backgroundColor: Colors.redAccent,
              duration: Duration(seconds: 4),
            ));
@@ -639,9 +661,8 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
           'renterPhone': renterPhone,
         });
 
-        await FirebaseFirestore.instance.collection('cycles').doc(widget.cycleId).update({
-          'isAvailable': true,
-        });
+        // Booking cancelled — _validateBookingSlot will allow new bookings
+        // No need to update cycle document
 
         setState(() {
           _bookingStatus = 'cancelled';
@@ -771,6 +792,8 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
               'status': 'started',
               'startTime': FieldValue.serverTimestamp(),
             });
+            // Ride started — _validateBookingSlot prevents overlapping bookings
+            // No need to delist cycle
             setState(() {
               _bookingStatus = 'started';
               _rideStartTime = DateTime.now();
@@ -800,19 +823,21 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         'ownerPhone': widget.data['ownerPhone'] ?? 'N/A',
 
         // Save Scheduled Times
-        'scheduledStartTime': DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, _startTime.hour, _startTime.minute),
-        'scheduledEndTime': DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, _endTime.hour, _endTime.minute),
+        // Fix for Overnight: DateTimes are now fully qualified from DatePicker
+        'scheduledStartTime': _startTime,
+        'scheduledEndTime': _endTime,
       });
 
       // Update local state with scheduled times immediately
-      _scheduledStartTime = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, _startTime.hour, _startTime.minute);
-      _scheduledEndTime = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, _endTime.hour, _endTime.minute);
+      _scheduledStartTime = _startTime;
+      _scheduledEndTime = _endTime;
 
-      // Delist the cycle (Mark as unavailable) AND set nextAvailableTime (End + 30m buffer)
+      // Don't fully delist — keep cycle visible for non-overlapping time slots.
+      // _validateBookingSlot handles conflict prevention.
+      // Only store nextAvailableTime as a hint for HomeScreen filtering.
       DateTime nextAvailable = _scheduledEndTime!.add(Duration(minutes: 30));
       
       await FirebaseFirestore.instance.collection('cycles').doc(widget.cycleId).update({
-        'isAvailable': false,
         'nextAvailableTime': nextAvailable,
       });
 
@@ -833,8 +858,8 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
               cleanPhone = '91$cleanPhone';
             }
             
-            String startTimeStr = _startTime.format(context);
-            String endTimeStr = _endTime.format(context);
+            String startTimeStr = DateFormat('MMM d, h:mm a').format(_startTime);
+            String endTimeStr = DateFormat('MMM d, h:mm a').format(_endTime);
             String message = "Hi, I just reserved your cycle (${widget.data['modelName']}) on *Campus Spokes*.\n\n"
                              "*Time:* $startTimeStr to $endTimeStr\n"
                              "*Estimated Cost:* ₹${_totalCost.toStringAsFixed(0)}\n\n"
@@ -1019,9 +1044,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                     'finalCost': finalCost,
                    });
                    
-                   await FirebaseFirestore.instance.collection('cycles').doc(widget.cycleId).update({
-                    'isAvailable': true,
-                   });
+                   // Ride completed — no need to update cycle availability
 
                    setState(() { _bookingStatus = 'completed'; });
                    Navigator.pop(context); // Close Dialog
@@ -1057,7 +1080,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                     transaction.update(cycleRef, {
                       'averageRating': newAvg,
                       'reviewCount': currentCount + 1,
-                      'isAvailable': true, // Relist here too
+                      // Rating saved — no need to update isAvailable
                     });
                   });
                   
@@ -1166,7 +1189,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text("Start Time", style: TextStyle(color: Colors.grey, fontSize: 10)),
-                                          Text(_startTime.format(context), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                          Text(DateFormat('MMM d, h:mm a').format(_startTime), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                                         ],
                                       ),
                                       Icon(Icons.arrow_forward, color: Colors.grey, size: 16),
@@ -1174,7 +1197,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                                         crossAxisAlignment: CrossAxisAlignment.end,
                                         children: [
                                           Text("Booked Until", style: TextStyle(color: Colors.grey, fontSize: 10)),
-                                          Text(_endTime.format(context), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                          Text(DateFormat('MMM d, h:mm a').format(_endTime), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                                         ],
                                       ),
                                    ],
@@ -1297,7 +1320,15 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
     );
   }
 
-  Widget _buildTimeBox(String label, TimeOfDay time, VoidCallback onTap) {
+  Widget _buildTimeBox(String label, DateTime time, VoidCallback onTap) {
+    // Determine if this time represents "Tomorrow" relative to _startTime
+    bool isNextDay = false;
+    if (label == "End") {
+       if (time.day != _startTime.day || time.month != _startTime.month || time.year != _startTime.year) {
+         isNextDay = true;
+       }
+    }
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1311,7 +1342,14 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
           children: [
             Text(label, style: TextStyle(color: Colors.grey, fontSize: 12)),
             SizedBox(height: 5),
-            Text(time.format(context), style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(DateFormat('h:mm a').format(time), style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Text(
+                DateFormat('MMM d').format(time), 
+                style: TextStyle(color: isNextDay ? Colors.redAccent : Colors.grey, fontSize: 10, fontWeight: isNextDay ? FontWeight.bold : FontWeight.normal)
+              ),
+            ),
           ],
         ),
       ),

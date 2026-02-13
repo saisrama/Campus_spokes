@@ -4,18 +4,190 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
 
-class RideDetailsScreen extends StatelessWidget {
+class RideDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> booking;
   final String bookingId;
 
   RideDetailsScreen({required this.booking, required this.bookingId});
 
   @override
+  State<RideDetailsScreen> createState() => _RideDetailsScreenState();
+}
+
+class _RideDetailsScreenState extends State<RideDetailsScreen> {
+  late String _status;
+  double? _finalCost;
+  bool _isProcessing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _status = widget.booking['status'] ?? 'unknown';
+    _finalCost = widget.booking['finalCost'] != null ? (widget.booking['finalCost']).toDouble() : null;
+  }
+
+  /// Calculate cost for actual ride duration using the same formula as cycle_detail_screen
+  double _calculateCostForDuration(double hours) {
+    int basePrice = (widget.booking['basePrice'] ?? widget.booking['cycleData']?['basePrice'] ?? 20).toInt();
+    int hourlyPrice = (widget.booking['hourlyPrice'] ?? widget.booking['cycleData']?['hourlyPrice'] ?? 10).toInt();
+
+    if (hours <= 0) return 0;
+    if (hours <= 2) return basePrice.toDouble();
+    double extraHours = hours - 2;
+    return basePrice + (extraHours.ceil() * hourlyPrice).toDouble();
+  }
+
+  Future<void> _ownerCancelBooking() async {
+    // For 'booked' status — ride never started, no charge
+    bool confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text("Cancel This Booking?", style: TextStyle(color: Colors.white)),
+        content: Text(
+          "The renter will not be charged since the ride was never started.",
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text("BACK", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text("CANCEL BOOKING", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    ) ?? false;
+
+    if (!confirmed) return;
+
+    setState(() => _isProcessing = true);
+
+    try {
+      await FirebaseFirestore.instance.collection('bookings').doc(widget.bookingId).update({
+        'status': 'owner_cancelled',
+        'endTime': FieldValue.serverTimestamp(),
+        'finalCost': 0,
+        'ownerCancelledAt': FieldValue.serverTimestamp(),
+      });
+
+      setState(() {
+        _status = 'owner_cancelled';
+        _finalCost = 0;
+        _isProcessing = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Booking cancelled. Renter was not charged."), backgroundColor: Colors.orange),
+      );
+    } catch (e) {
+      setState(() => _isProcessing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
+  Future<void> _ownerEndRide() async {
+    // For 'started' status — calculate cost for actual time used
+    DateTime now = DateTime.now();
+    DateTime? rideStartTime;
+
+    if (widget.booking['startTime'] != null) {
+      rideStartTime = (widget.booking['startTime'] as Timestamp).toDate();
+    } else if (widget.booking['scheduledStartTime'] != null) {
+      rideStartTime = (widget.booking['scheduledStartTime'] as Timestamp).toDate();
+    }
+
+    if (rideStartTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Cannot determine ride start time."), backgroundColor: Colors.redAccent),
+      );
+      return;
+    }
+
+    double hoursUsed = now.difference(rideStartTime).inMinutes / 60.0;
+    double cost = _calculateCostForDuration(hoursUsed);
+    String durationText = hoursUsed < 1 
+        ? "${now.difference(rideStartTime).inMinutes} minutes" 
+        : "${hoursUsed.toStringAsFixed(1)} hours";
+
+    bool confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text("End This Ride?", style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Ride duration: $durationText", style: TextStyle(color: Colors.white70)),
+            SizedBox(height: 12),
+            Text(
+              "Cost: ₹${cost.toStringAsFixed(0)}",
+              style: TextStyle(color: Colors.green, fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              "The renter will be charged for the time used.",
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text("BACK", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text("END RIDE", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    ) ?? false;
+
+    if (!confirmed) return;
+
+    setState(() => _isProcessing = true);
+
+    try {
+      await FirebaseFirestore.instance.collection('bookings').doc(widget.bookingId).update({
+        'status': 'payment_pending',
+        'endTime': FieldValue.serverTimestamp(),
+        'finalCost': cost,
+        'ownerEndedAt': FieldValue.serverTimestamp(),
+        'ownerEnded': true,
+      });
+
+      setState(() {
+        _status = 'payment_pending';
+        _finalCost = cost;
+        _isProcessing = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Ride ended. Renter owes ₹${cost.toStringAsFixed(0)}."), backgroundColor: Colors.green),
+      );
+    } catch (e) {
+      setState(() => _isProcessing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    String cycleId = booking['cycleId'];
-    String ownerId = booking['ownerId'];
-    String userId = booking['userId'];
-    String status = booking['status'] ?? 'unknown';
+    String cycleId = widget.booking['cycleId'];
+    String ownerId = widget.booking['ownerId'];
+    String userId = widget.booking['userId'];
     
     // Dynamic Logic: Who is viewing?
     String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
@@ -24,9 +196,9 @@ class RideDetailsScreen extends StatelessWidget {
     String targetUserId = isOwnerViewing ? userId : ownerId;
     String targetUserLabel = isOwnerViewing ? "Renter Details" : "Owner Details";
     
-    Timestamp? startTime = booking['startTime'];
-    Timestamp? endTime = booking['endTime'];
-    double cost = (booking['finalCost'] ?? 0).toDouble();
+    Timestamp? startTime = widget.booking['startTime'];
+    Timestamp? endTime = widget.booking['endTime'];
+    double cost = _finalCost ?? (widget.booking['finalCost'] ?? 0).toDouble();
 
     return Scaffold(
       appBar: AppBar(title: Text("Ride Details")),
@@ -40,35 +212,43 @@ class RideDetailsScreen extends StatelessWidget {
               width: double.infinity,
               padding: EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: status == 'completed' ? Colors.green.withOpacity(0.1) : 
-                       (status == 'cancelled' ? Colors.red.withOpacity(0.1) : Colors.blue.withOpacity(0.1)),
+                color: _status == 'completed' ? Colors.green.withOpacity(0.1) : 
+                       (_status == 'cancelled' || _status == 'owner_cancelled' ? Colors.red.withOpacity(0.1) : Colors.blue.withOpacity(0.1)),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: status == 'completed' ? Colors.green : 
-                                   (status == 'cancelled' ? Colors.red : Colors.blue)),
+                border: Border.all(color: _status == 'completed' ? Colors.green : 
+                                   (_status == 'cancelled' || _status == 'owner_cancelled' ? Colors.red : Colors.blue)),
               ),
               child: Column(
                 children: [
                   Text(
-                    status == 'completed' ? "RIDE COMPLETED" : 
-                    (status == 'cancelled' ? "RIDE CANCELLED" : "RIDE ONGOING"),
+                    _status == 'completed' ? "RIDE COMPLETED" : 
+                    (_status == 'cancelled' ? "RIDE CANCELLED" : 
+                    (_status == 'owner_cancelled' ? "CANCELLED BY OWNER" :
+                    (_status == 'payment_pending' ? "PAYMENT PENDING" : "RIDE ONGOING"))),
                     style: TextStyle(
-                      color: status == 'completed' ? Colors.green : 
-                             (status == 'cancelled' ? Colors.red : Colors.blue),
+                      color: _status == 'completed' ? Colors.green : 
+                             (_status == 'cancelled' || _status == 'owner_cancelled' ? Colors.red : Colors.blue),
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
                     ),
                   ),
-                  if (status == 'completed') ...[
+                  if (_status == 'completed' || _status == 'payment_pending') ...[
                     SizedBox(height: 8),
                     Text(
                       "Total Cost: ₹${cost.toStringAsFixed(0)}",
                       style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                     ),
-                  ] else if (status == 'cancelled') ...[
+                  ] else if (_status == 'cancelled') ...[
                     SizedBox(height: 8),
                     Text(
-                      "Cancellation Fee: ₹${(booking['cancellationFee'] ?? booking['finalCost'] ?? 0).toString()}",
+                      "Cancellation Fee: ₹${(widget.booking['cancellationFee'] ?? widget.booking['finalCost'] ?? 0).toString()}",
                       style: TextStyle(color: Colors.redAccent, fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                  ] else if (_status == 'owner_cancelled') ...[
+                    SizedBox(height: 8),
+                    Text(
+                      "No charge — cancelled by owner",
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
                     ),
                   ]
                 ],
@@ -94,8 +274,6 @@ class RideDetailsScreen extends StatelessWidget {
                   imageUrl = data['imageUrl'] ?? "";
                   location = data['location'] ?? "Unknown Location";
                 } else {
-                    // Fallback to booking data if cycle is deleted
-                    // In a real app we would store snapshot in booking
                     return Text("Cycle information no longer available.");
                 }
 
@@ -153,12 +331,12 @@ class RideDetailsScreen extends StatelessWidget {
                 // 1. Try to use Snapshot Data from Booking (Fallback/Default)
                 if (isOwnerViewing) {
                    // Viewing Renter
-                   if (booking['renterName'] != null) name = booking['renterName'];
-                   if (booking['renterPhone'] != null) phone = booking['renterPhone'];
+                   if (widget.booking['renterName'] != null) name = widget.booking['renterName'];
+                   if (widget.booking['renterPhone'] != null) phone = widget.booking['renterPhone'];
                 } else {
                    // Viewing Owner
-                   if (booking['ownerName'] != null) name = booking['ownerName'];
-                   if (booking['ownerPhone'] != null) phone = booking['ownerPhone'];
+                   if (widget.booking['ownerName'] != null) name = widget.booking['ownerName'];
+                   if (widget.booking['ownerPhone'] != null) phone = widget.booking['ownerPhone'];
                 }
 
                 // 2. Overwrite with Live Data if available
@@ -202,15 +380,46 @@ class RideDetailsScreen extends StatelessWidget {
                   children: [
                     _buildInfoRow(Icons.play_circle_fill, "Start Time", startTime != null ? DateFormat('MMM d, h:mm a').format(startTime.toDate()) : "Not Started"),
                     Divider(color: Colors.white12),
-                    if (status == 'cancelled')
-                       _buildInfoRow(Icons.cancel, "Cancelled At", booking['cancelledAt'] != null ? DateFormat('MMM d, h:mm a').format((booking['cancelledAt'] as Timestamp).toDate()) : "Unknown")
+                    if (_status == 'cancelled' || _status == 'owner_cancelled')
+                       _buildInfoRow(Icons.cancel, "Cancelled At", widget.booking['cancelledAt'] != null ? DateFormat('MMM d, h:mm a').format((widget.booking['cancelledAt'] as Timestamp).toDate()) : 
+                          (widget.booking['ownerCancelledAt'] != null ? DateFormat('MMM d, h:mm a').format((widget.booking['ownerCancelledAt'] as Timestamp).toDate()) : "Just now"))
                     else
                        _buildInfoRow(Icons.flag, "End Time", endTime != null ? DateFormat('MMM d, h:mm a').format(endTime.toDate()) : "Ongoing"),
                   ],
                 ),
               ),
             ),
-             SizedBox(height: 30),
+
+            // OWNER ACTION BUTTON
+            if (isOwnerViewing && (_status == 'booked' || _status == 'started')) ...[
+              SizedBox(height: 30),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: _isProcessing 
+                    ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : Icon(_status == 'started' ? Icons.stop_circle : Icons.cancel, color: Colors.white),
+                  label: Text(
+                    _status == 'started' ? "END RIDE" : "CANCEL BOOKING",
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  onPressed: _isProcessing ? null : () {
+                    if (_status == 'started') {
+                      _ownerEndRide();
+                    } else {
+                      _ownerCancelBooking();
+                    }
+                  },
+                ),
+              ),
+            ],
+
+            SizedBox(height: 30),
           ],
         ),
       ),

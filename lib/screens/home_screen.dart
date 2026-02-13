@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'landing_screen.dart'; // Added import
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 import 'add_cycle_screen.dart';
@@ -22,14 +25,9 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<String> _locations = ["All", "VK Back Gate", "Mess 2", "VM Cycle Parking", "Mess 1", "Ganga/Meera Parking"];
   
   // Time Slot Selection
-  TimeOfDay? _selectedStartTime;
-  TimeOfDay? _selectedEndTime;
-  DateTime? _filterDate; // For now assuming today/tomorrow? Let's assume TODAY for simplicity or handle dates. 
-  // User said "Select time slot". 
+  DateTime? _selectedStartTime;
+  DateTime? _selectedEndTime;
   
-  // Helper to get full DateTime from TimeOfDay (assuming Today if time is future, else Tomorrow? Or just Today for MVP)
-  // For MVP let's assume filtering for "Today"
-
   // Notification Streams
   StreamSubscription? _ownerNotificationStream;
   StreamSubscription? _renterNotificationStream;
@@ -38,16 +36,22 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     // Default Time Slot
-    _selectedStartTime = TimeOfDay.now();
     DateTime now = DateTime.now();
-    DateTime endDt = now.add(Duration(hours: 2));
-    _selectedEndTime = TimeOfDay.fromDateTime(endDt);
+    // Round to next 15 mins? Or just keep null to let user pick?
+    // User wants control. Let's start with NULL or Default? 
+    // Code had: _selectedStartTime = TimeOfDay.now();
+    // Let's keep it initialized for better UX
+    _selectedStartTime = now;
+    _selectedEndTime = now.add(Duration(hours: 2));
 
     NotificationService.initialize();
     _setupNotifications();
     
-    // Force Profile Check
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkProfileCompletion());
+    // Force Profile Check & Update Check
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkProfileCompletion();
+      _checkForUpdate();
+    });
   }
 
   Future<void> _checkProfileCompletion() async {
@@ -58,6 +62,85 @@ class _HomeScreenState extends State<HomeScreen> {
          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => ProfileSetupScreen()));
       }
     }
+  }
+
+  Future<void> _checkForUpdate() async {
+    // Skip on web — Play Store updates don't apply
+    if (kIsWeb) return;
+
+    try {
+      // 1. Get current app version
+      PackageInfo packageInfo = await PackageInfo.fromPlatform();
+      String currentVersion = packageInfo.version; // e.g. "1.0.1"
+
+      // 2. Get minimum required version from Firestore
+      var configDoc = await FirebaseFirestore.instance.collection('config').doc('app').get();
+      if (!configDoc.exists) return;
+
+      String? minVersion = configDoc.data()?['minVersion'];
+      if (minVersion == null) return;
+
+      // 3. Compare versions
+      if (_isVersionLower(currentVersion, minVersion)) {
+        if (!mounted) return;
+        // 4. Show force-update dialog (non-dismissible)
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => PopScope(
+            canPop: false,
+            child: AlertDialog(
+              backgroundColor: Color(0xFF1E1E1E),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Icon(Icons.system_update, color: Colors.blueAccent),
+                  SizedBox(width: 10),
+                  Text("Update Required", style: TextStyle(color: Colors.white)),
+                ],
+              ),
+              content: Text(
+                "A new version of Campus Spokes is available. Please update to continue using the app.",
+                style: TextStyle(color: Colors.white70),
+              ),
+              actions: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueAccent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () async {
+                      final Uri url = Uri.parse('https://play.google.com/store/apps/details?id=com.sreerama.campuspks');
+                      await launchUrl(url, mode: LaunchMode.externalApplication);
+                    },
+                    child: Text("Update Now", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      print("Update check failed: $e");
+    }
+  }
+
+  /// Returns true if [current] is lower than [minimum] (semantic versioning)
+  bool _isVersionLower(String current, String minimum) {
+    List<int> curr = current.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    List<int> min = minimum.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    // Pad to 3 segments
+    while (curr.length < 3) curr.add(0);
+    while (min.length < 3) min.add(0);
+
+    for (int i = 0; i < 3; i++) {
+      if (curr[i] < min[i]) return true;
+      if (curr[i] > min[i]) return false;
+    }
+    return false; // equal = not lower
   }
 
   void _setupNotifications() {
@@ -215,24 +298,15 @@ class _HomeScreenState extends State<HomeScreen> {
                  }).toList();
               }
 
-              // 4. Availability / Time Buffer
-              if (_selectedStartTime != null) {
-                 DateTime now = DateTime.now();
-                 DateTime startDateTime = DateTime(now.year, now.month, now.day, _selectedStartTime!.hour, _selectedStartTime!.minute);
-                 if (startDateTime.isBefore(now)) startDateTime = startDateTime.add(Duration(days: 1)); // Handle tomorrow?
-                 
-                 docs = docs.where((d) {
-                    var data = d.data() as Map<String, dynamic>;
-                    if (data['isAvailable'] == true) return true; 
-                    if (data['nextAvailableTime'] != null) {
-                       DateTime nextAvailable = (data['nextAvailableTime'] as Timestamp).toDate();
-                       return startDateTime.isAfter(nextAvailable);
-                    }
-                    return false;
-                 }).toList();
-              } else {
-                 docs = docs.where((d) => d['isAvailable'] == true).toList();
-              }
+              // 4. Owner Availability Filter
+              // isAvailable is ONLY controlled by the owner's manual toggle in My Listings.
+              // System never changes this field. _validateBookingSlot handles booking conflicts.
+              docs = docs.where((d) {
+                 var data = d.data() as Map<String, dynamic>;
+                 // Hide only if owner manually delisted
+                 if (data['isAvailable'] == false) return false;
+                 return true;
+              }).toList();
 
               return CustomScrollView(
                 slivers: [
@@ -306,9 +380,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           // Dynamic Price Calc
                           double? dynamicTotal;
                           if (_selectedStartTime != null && _selectedEndTime != null) {
-                             double durationHrs = (_selectedEndTime!.hour + _selectedEndTime!.minute/60.0) - 
-                                                  (_selectedStartTime!.hour + _selectedStartTime!.minute/60.0);
-                             if (durationHrs < 0) durationHrs += 24;
+                             double durationHrs = _selectedEndTime!.difference(_selectedStartTime!).inMinutes / 60.0;
+                             if (durationHrs < 0) durationHrs = 0;
                              
                              double base = (data['basePrice'] ?? 0).toDouble();
                              double hourly = (data['hourlyPrice'] ?? 0).toDouble();
@@ -663,21 +736,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: _buildTimePill(
                   "Start", 
                   _selectedStartTime, 
-                  () async {
-                    TimeOfDay? t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-                    if (t != null) {
-                       TimeOfDay now = TimeOfDay.now();
-                       // Simple check: if hour is less, or hour is same but minute is less
-                       if (t.hour < now.hour || (t.hour == now.hour && t.minute < now.minute)) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                            content: Text("Start time cannot be in the past!"),
-                            backgroundColor: Colors.redAccent,
-                          ));
-                       } else {
-                          setState(() => _selectedStartTime = t);
-                       }
-                    }
-                  }
+                  () => _pickDateTime(true)
                 ),
               ),
               Padding(
@@ -688,10 +747,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: _buildTimePill(
                   "End", 
                   _selectedEndTime, 
-                  () async {
-                    TimeOfDay? t = await showTimePicker(context: context, initialTime: _selectedStartTime ?? TimeOfDay.now());
-                    if (t != null) setState(() => _selectedEndTime = t);
-                  }
+                  () => _pickDateTime(false)
                 ),
               ),
             ],
@@ -712,7 +768,59 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTimePill(String label, TimeOfDay? time, VoidCallback onTap) {
+  Future<void> _pickDateTime(bool isStart) async {
+      DateTime initialDate = isStart ? (_selectedStartTime ?? DateTime.now()) : (_selectedEndTime ?? DateTime.now());
+      TimeOfDay initialTime = TimeOfDay.fromDateTime(initialDate);
+
+      final DateTime? pickedDate = await showDatePicker(
+        context: context,
+        initialDate: initialDate,
+        firstDate: DateTime.now().subtract(Duration(days: 1)),
+        lastDate: DateTime.now().add(Duration(days: 7)),
+        builder: (context, child) => Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: ColorScheme.dark(primary: Colors.white, onSurface: Colors.white),
+          ),
+          child: child!,
+        ),
+      );
+
+      if (pickedDate == null) return;
+
+      final TimeOfDay? pickedTime = await showTimePicker(
+        context: context,
+        initialTime: initialTime,
+        builder: (context, child) => Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: ColorScheme.dark(primary: Colors.white, onSurface: Colors.white),
+          ),
+          child: child!,
+        ),
+      );
+
+      if (pickedTime == null) return;
+
+      DateTime pickedDateTime = DateTime(
+        pickedDate.year, 
+        pickedDate.month, 
+        pickedDate.day, 
+        pickedTime.hour, 
+        pickedTime.minute
+      );
+
+      setState(() {
+         if (isStart) {
+            _selectedStartTime = pickedDateTime;
+            if (_selectedEndTime != null && _selectedEndTime!.isBefore(_selectedStartTime!)) {
+                _selectedEndTime = _selectedStartTime!.add(Duration(hours: 2));
+            }
+         } else {
+            _selectedEndTime = pickedDateTime;
+         }
+      });
+  }
+
+  Widget _buildTimePill(String label, DateTime? time, VoidCallback onTap) {
     bool isSelected = time != null;
     return GestureDetector(
       onTap: onTap,
@@ -732,13 +840,16 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Icon(Icons.access_time, size: 14, color: isSelected ? Colors.blueAccent : Colors.white70),
                 SizedBox(width: 6),
-                Text(
-                  time?.format(context) ?? "-- : --", 
-                  style: TextStyle(
-                    color: isSelected ? Colors.white : Colors.white60, 
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    fontSize: 15
-                  )
+                Expanded(
+                  child: Text(
+                    time != null ? DateFormat('MMM d, h:mm a').format(time) : "-- : --", 
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.white60, 
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontSize: 13
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
