@@ -2,224 +2,146 @@ import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'dart:convert'; // Import for Base64 decoding
+import 'dart:convert';
 import 'package:campuspks/data/explore_images.dart';
 import 'package:campuspks/screens/eateries_screen.dart';
+import '../theme/app_theme.dart';
 
 class ExploreScreen extends StatelessWidget {
+  const ExploreScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFF121212),
-      appBar: AppBar(
-        title: Text("Explore Destinations", style: GoogleFonts.poppins(color: Colors.white)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: IconThemeData(color: Colors.white),
-      ),
+      backgroundColor: kBgColor,
+      appBar: rentXAppBar(context, "Explore Destinations", subtitle: "Ride out and discover nearby spots"),
       body: ListView(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         children: [
-          _buildDestinationCard(
-            context,
-            title: "Grab a bite",
+          _buildCard(context,
+            title: "Grab a Bite",
             distance: "~4 kms",
             images: [eateryTaaza, eateryUdupi, eaterySereno, eateryHaveli],
-            description: "Choose from numerous options ranging from cafes to South Indian and fine dining around the campus.",
+            description: "Choose from cafes, South Indian, and fine dining spots around campus.",
             duration: "Explore local cuisines",
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => EateriesScreen()),
-              );
-            },
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EateriesScreen())),
           ),
-          SizedBox(height: 24),
-          _buildDestinationCard(
-            context,
+          const SizedBox(height: 16),
+          _buildCard(context,
             title: "Shamirpet Lake",
             distance: "9 kms",
             images: [shamirpetLake1, shamirpetLake2, shamirpetLake3],
-            description: "A beautiful artificial lake, perfect for a relaxing ride and sunset views. Enjoy the cool breeze and scenic water views.",
-            duration: "Recommended Rental Duration: 2-3 hrs",
+            description: "Beautiful artificial lake. Perfect for a relaxing ride and stunning sunset views.",
+            duration: "Recommended: 2–3 hrs rental",
             mapLink: "https://maps.app.goo.gl/gZwMQACMzfK9JN6t7",
           ),
-          SizedBox(height: 24),
-          _buildDestinationCard(
-            context,
+          const SizedBox(height: 16),
+          _buildCard(context,
             title: "Shamirpet Deer Park",
             distance: "7.5 kms",
-            images: [deerPark1, deerPark2], // Updated to use only the two new images provided
-            description: "A serene park perfect for nature lovers and spotting deer in their natural habitat. Ideal for a peaceful getaway.",
-            duration: "Recommended Rental Duration: 2-3 hrs",
+            images: [deerPark1, deerPark2],
+            description: "Serene park for nature lovers. Spot deer in their natural habitat for a peaceful getaway.",
+            duration: "Recommended: 2–3 hrs rental",
             mapLink: "https://maps.app.goo.gl/QnHM3AVjspUesx9x9",
           ),
-          SizedBox(height: 24),
-          _buildDestinationCard(
-            context,
+          const SizedBox(height: 16),
+          _buildCard(context,
             title: "Utm Lake View Point",
             distance: "11.7 kms",
             images: [utmLake1, utmLake2],
-            description: "A scenic view point overlooking the lake with rocky terrain, offering a peaceful atmosphere and stunning natural beauty. Great for photography and nature walks.",
-            duration: "Recommended Rental Duration: 3-4 hrs",
+            description: "Scenic viewpoint with rocky terrain and stunning natural beauty. Great for photography.",
+            duration: "Recommended: 3–4 hrs rental",
             mapLink: "https://maps.app.goo.gl/ToqZLoVZr2ApB49AA",
           ),
-          SizedBox(height: 24),
-          _buildDestinationCard(
-            context,
+          const SizedBox(height: 16),
+          _buildCard(context,
             title: "TSFDC Urban Forest Park",
-            titleFontSize: 18, // Reduced font size to prevent clash with distance badge
             distance: "2 kms",
-            images: [tsfdcPark], 
-            description: "A lush green urban forest park with dedicated cycling tracks. The perfect spot for a refreshing ride amidst nature.",
-            duration: "Recommended Rental Duration: 1-2 hrs",
+            images: [tsfdcPark],
+            description: "Lush green urban forest with dedicated cycling tracks. Perfect for a refreshing ride amidst nature.",
+            duration: "Recommended: 1–2 hrs rental",
             mapLink: "https://maps.app.goo.gl/Ha85ZoMxdurBctae7",
           ),
+          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  Widget _buildDestinationCard(
-    BuildContext context, {
+  Widget _buildCard(BuildContext context, {
     required String title,
     required String distance,
     required List<String> images,
     required String description,
     required String duration,
     String? mapLink,
-    double titleFontSize = 22, // Default size
     VoidCallback? onTap,
   }) {
     return GestureDetector(
       onTap: onTap ?? (mapLink != null ? () => _launchMaps(mapLink) : null),
       child: Container(
         decoration: BoxDecoration(
-          color: Color(0xFF1E1E1E),
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 10, offset: Offset(0, 5))],
+          color: kSurface1,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: kBorder),
         ),
         clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // IMAGE DISPLAY (Carousel vs Single)
-            if (images.length > 1) 
-              CarouselSlider(
-                options: CarouselOptions(
-                  height: 200.0,
-                  viewportFraction: 1.0, 
-                  enableInfiniteScroll: true,
-                  autoPlay: true,
-                ),
-                items: images.map((i) {
-                  return Builder(
-                    builder: (BuildContext context) {
-                      return Container(
-                        width: MediaQuery.of(context).size.width,
-                        decoration: BoxDecoration(color: Colors.black),
-                        child: i.isNotEmpty 
-                          ? Image.memory(
-                              base64Decode(i),
-                              fit: BoxFit.cover,
-                              errorBuilder: (c, e, s) => Center(child: Icon(Icons.broken_image, size: 50, color: Colors.white24)),
-                            )
-                          : Center(child: Icon(Icons.image_not_supported, color: Colors.white24, size: 50)),
-                      );
-                    },
-                  );
-                }).toList(),
-              )
-            else 
-              Container(
-                height: 200.0,
-                width: double.infinity,
-                decoration: BoxDecoration(color: Colors.black),
-                child: images.isNotEmpty && images.first.isNotEmpty
-                  ? Image.memory(
-                      base64Decode(images.first),
-                      fit: BoxFit.cover,
-                      errorBuilder: (c, e, s) => Center(child: Icon(Icons.broken_image, size: 50, color: Colors.white24)),
-                    )
-                  : Center(child: Icon(Icons.image_not_supported, color: Colors.white24, size: 50)),
-              ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Image / Carousel
+          if (images.length > 1)
+            CarouselSlider(
+              options: CarouselOptions(height: 200, viewportFraction: 1.0, enableInfiniteScroll: true, autoPlay: true),
+              items: images.map((i) => _imageWidget(i)).toList(),
+            )
+          else
+            SizedBox(height: 200, width: double.infinity, child: _imageWidget(images.isNotEmpty ? images.first : '')),
 
-            // DETAILS
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: GoogleFonts.poppins(
-                            fontSize: titleFontSize, // Use dynamic font size
-                            fontWeight: FontWeight.bold, 
-                            color: Colors.white
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.blueAccent.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.blueAccent.withOpacity(0.5))
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.directions_bike, size: 16, color: Colors.blueAccent),
-                            SizedBox(width: 4),
-                            Text(distance, style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      )
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    description,
-                    style: TextStyle(color: Colors.grey[400], fontSize: 14),
-                  ),
-                  SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Icon(Icons.access_time_filled, size: 16, color: Colors.orange),
-                      SizedBox(width: 6),
-                      Text(
-                        duration,
-                        style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Text(
-                        onTap != null ? "View Eateries" : "View on Maps", 
-                        style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)
-                      ),
-                      Icon(Icons.arrow_forward, size: 16, color: Colors.blue),
-                    ],
-                  )
-                ],
-              ),
-            ),
-          ],
-        ),
+          // Content
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(
+                  child: Text(title, style: GoogleFonts.inter(color: kTextPrimary, fontSize: 17, fontWeight: FontWeight.bold)),
+                ),
+                rentXBadge(distance, color: kAccentCyan),
+              ]),
+              const SizedBox(height: 8),
+              Text(description, style: const TextStyle(color: kTextMuted, fontSize: 13, height: 1.5)),
+              const SizedBox(height: 12),
+              Row(children: [
+                const Icon(Icons.access_time_rounded, size: 14, color: kAccentOrange),
+                const SizedBox(width: 6),
+                Text(duration, style: const TextStyle(color: kAccentOrange, fontWeight: FontWeight.w600, fontSize: 12)),
+              ]),
+              const SizedBox(height: 12),
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                Text(
+                  onTap != null ? "View Eateries" : "View on Maps",
+                  style: const TextStyle(color: kAccentCyan, fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.arrow_forward_rounded, size: 14, color: kAccentCyan),
+              ]),
+            ]),
+          ),
+        ]),
       ),
+    );
+  }
+
+  Widget _imageWidget(String base64) {
+    if (base64.isEmpty) return const Center(child: Icon(Icons.image_not_supported_outlined, color: kTextDim, size: 40));
+    return Image.memory(
+      base64Decode(base64),
+      fit: BoxFit.cover,
+      width: double.infinity,
+      errorBuilder: (c, e, s) => const Center(child: Icon(Icons.broken_image_outlined, size: 40, color: kTextDim)),
     );
   }
 
   Future<void> _launchMaps(String urlString) async {
     final Uri url = Uri.parse(urlString);
-    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      throw Exception('Could not launch $url');
-    }
+    await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 }

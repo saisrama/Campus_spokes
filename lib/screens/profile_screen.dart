@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Added for future profile data fetch if needed
 import 'login_screen.dart';
 import 'my_listings_screen.dart';
 import 'ride_history_screen.dart';
@@ -18,127 +17,221 @@ class ProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF000000),
       appBar: AppBar(
-        title: Text("Profile"),
+        backgroundColor: const Color(0xFF000000),
+        elevation: 0,
+        title: const Text(
+          "Profile",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+        ),
         actions: [
           IconButton(
-            icon: Icon(Icons.logout, color: Colors.red),
+            icon: const Icon(Icons.logout, color: Colors.redAccent),
             onPressed: () async {
               await FirebaseAuth.instance.signOut();
               await GoogleSignIn().signOut();
-              Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginScreen()), (r) => false);
+              if (context.mounted) {
+                Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginScreen()), (r) => false);
+              }
             },
           )
         ],
       ),
-      body: Column(
+      body: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         children: [
-          SizedBox(height: 30),
-          Center(
-            child: CircleAvatar(
-              radius: 50,
-              backgroundImage: NetworkImage(user?.photoURL ?? "https://via.placeholder.com/150"),
+          // PROFILE HEADER CARD
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF09090B),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xFF27272A)),
             ),
-          ),
-          SizedBox(height: 10),
-          Text(user?.displayName ?? "User", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(user?.email ?? "", style: TextStyle(color: Colors.grey)),
-            ],
-          ),
-          
-          SizedBox(height: 40),
-
-          // Menu Items
-          ListTile(
-            leading: Icon(Icons.edit, color: Colors.purple),
-            title: Text("Edit Profile"),
-            trailing: Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-            onTap: () {
-               Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileSetupScreen(isEditing: true)));
-            },
-          ),
-          ListTile(
-            leading: Icon(Icons.list_alt, color: Colors.blueAccent),
-            title: Text("My Listings"),
-            trailing: Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => MyListingsScreen()));
-            },
-          ),
-          ListTile(
-            leading: Icon(Icons.history, color: Colors.white),
-            title: Text("Your Rides"),
-            trailing: Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => RideHistoryScreen()));
-            },
-          ),
-          ListTile(
-            leading: Icon(Icons.bookmark_added, color: Colors.orange),
-            title: Text("Received Bookings"),
-            trailing: Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => ReceivedBookingsScreen()));
-            },
-          ),
-          ListTile(
-            leading: Icon(Icons.payment, color: Colors.green), // Changed icon to payment related
-            title: Text("Payment History"),
-            trailing: Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentHistoryScreen()));
-            },
-          ),
-          ListTile(
-            leading: Icon(Icons.support_agent, color: Colors.amber),
-            title: Text("File Grievance"),
-            trailing: Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-            onTap: () async {
-               final Uri whatsappUrl = Uri.parse("https://wa.me/917022914482");
-               if (await canLaunchUrl(whatsappUrl)) {
-                 await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
-               } else {
-                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Could not open WhatsApp")));
-               }
-            },
-          ),
-          Divider(color: Colors.grey),
-          ListTile(
-            leading: Icon(Icons.logout, color: Colors.red),
-            title: Text("Log Out", style: TextStyle(color: Colors.red)),
-            onTap: () async {
-              await FirebaseAuth.instance.signOut();
-              await GoogleSignIn().signOut();
-              Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginScreen()), (r) => false);
-            },
-          ),
-          SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
-                Text("Made with ❤️ by Sai Sreerama M", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                SizedBox(height: 5),
-                Text(
-                  "Special thanks to:",
-                  style: TextStyle(color: Colors.grey, fontSize: 10),
-                  textAlign: TextAlign.center,
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFF27272A), width: 2),
+                  ),
+                  child: CircleAvatar(
+                    radius: 44,
+                    backgroundImage: NetworkImage(user?.photoURL ?? "https://via.placeholder.com/150"),
+                    backgroundColor: const Color(0xFF18181B),
+                  ),
                 ),
+                const SizedBox(height: 14),
                 Text(
-                  "Athithan V, Bhanuteja Abburi, Pariksheth Malathkar, Praneel S Gandhe, Madhav Praveen, Ram K Musti, Saket M, Sameer Singh, Srijen Raja and Yash Raj",
-                  style: TextStyle(color: Colors.grey, fontSize: 9),
-                  textAlign: TextAlign.center,
-                  softWrap: true,
+                  user?.displayName ?? "Student",
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFFFAFAFA)),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  user?.email ?? "",
+                  style: const TextStyle(color: Color(0xFFA1A1AA), fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF18181B),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFF27272A)),
+                  ),
+                  child: const Text(
+                    "Rent Anything • Buy Anything • Ride Anywhere",
+                    style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ],
             ),
           ),
+
+          const SizedBox(height: 24),
+
+          // MENU GROUP
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF09090B),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFF27272A)),
+            ),
+            child: Column(
+              children: [
+                _buildMenuItem(
+                  context,
+                  icon: Icons.edit,
+                  color: const Color(0xFFA855F7),
+                  title: "Edit Profile",
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileSetupScreen(isEditing: true))),
+                ),
+                const Divider(color: Color(0xFF18181B), height: 1),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.list_alt,
+                  color: const Color(0xFF38BDF8),
+                  title: "My Listings",
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MyListingsScreen())),
+                ),
+                const Divider(color: Color(0xFF18181B), height: 1),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.history,
+                  color: const Color(0xFF818CF8),
+                  title: "Your Rentals",
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RideHistoryScreen())),
+                ),
+                const Divider(color: Color(0xFF18181B), height: 1),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.bookmark_added,
+                  color: const Color(0xFFFB923C),
+                  title: "Received Bookings",
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ReceivedBookingsScreen())),
+                ),
+                const Divider(color: Color(0xFF18181B), height: 1),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.payment,
+                  color: const Color(0xFF34D399),
+                  title: "Payment History",
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentHistoryScreen())),
+                ),
+                const Divider(color: Color(0xFF18181B), height: 1),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.support_agent,
+                  color: const Color(0xFFFBBF24),
+                  title: "File Grievance (WhatsApp)",
+                  onTap: () async {
+                    final Uri whatsappUrl = Uri.parse("https://wa.me/917022914482");
+                    if (await canLaunchUrl(whatsappUrl)) {
+                      await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
+                    } else if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Could not open WhatsApp")));
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // LOG OUT BUTTON
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF09090B),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+            ),
+            child: ListTile(
+              leading: const Icon(Icons.logout, color: Colors.redAccent),
+              title: const Text("Log Out", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+              onTap: () async {
+                await FirebaseAuth.instance.signOut();
+                await GoogleSignIn().signOut();
+                if (context.mounted) {
+                  Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginScreen()), (r) => false);
+                }
+              },
+            ),
+          ),
+
+          const SizedBox(height: 28),
+
+          // CREDITS & ACKNOWLEDGMENTS
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Column(
+              children: [
+                const Text(
+                  "RentX • Made with ❤️ by Sai Sreerama M",
+                  style: TextStyle(color: Color(0xFFFAFAFA), fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  "Special thanks to:",
+                  style: TextStyle(color: Color(0xFF71717A), fontSize: 10),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  "Athithan V, Bhanuteja Abburi, Pariksheth Malathkar, Praneel S Gandhe, Madhav Praveen, Ram K Musti, Saket M, Sameer Singh, Srijen Raja and Yash Raj",
+                  style: TextStyle(color: Color(0xFF71717A), fontSize: 9),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 30),
         ],
       ),
+    );
+  }
+
+  Widget _buildMenuItem(
+    BuildContext context, {
+    required IconData icon,
+    required Color color,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      onTap: onTap,
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: color, size: 20),
+      ),
+      title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+      trailing: const Icon(Icons.chevron_right, size: 18, color: Color(0xFF71717A)),
     );
   }
 }

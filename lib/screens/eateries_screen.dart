@@ -4,119 +4,41 @@ import 'package:carousel_slider/carousel_slider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import '../data/explore_images.dart';
+import '../theme/app_theme.dart';
 
 class EateriesScreen extends StatelessWidget {
+  const EateriesScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFF121212),
-      appBar: AppBar(
-        title: Text(
-          "Eateries Around Campus",
-          style: GoogleFonts.poppins(color: Colors.white),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: IconThemeData(color: Colors.white),
-      ),
+      backgroundColor: kBgColor,
+      appBar: rentXAppBar(context, "Eateries Around Campus", subtitle: "Find great spots to eat nearby"),
       body: ListView(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         children: [
-          _buildEateryDestinationCard(
-            context,
-            title: "Tandoor Restaurant",
-            distance: "3.7 kms",
-            images: [eateryTandoor],
-            description: "Known for its rich and flavorful Tandoori dishes and diverse multi-cuisine menu. A great spot for a hearty meal with friends.",
-            duration: "Recommended Rental Duration: 2 hrs",
-            priceInfo: "Price for two: ~₹600",
-            mapLink: "https://maps.app.goo.gl/5fFHXuaevAHBc8bY7",
-          ),
-          SizedBox(height: 24),
-          _buildEateryDestinationCard(
-            context,
-            title: "Hotel Shree Krishna Udupi",
-            titleFontSize: 18, // Reduced font size to prevent clash with distance badge
-            distance: "3.7 kms",
-            images: [eateryUdupi],
-            description: "Known for its authentic South Indian vegetarian cuisine, offering a variety of dosas, idlis, and thalis. A perfect spot for a quick and delicious breakfast or lunch.",
-            duration: "Recommended Rental Duration: 2 hrs",
-            priceInfo: "Price for two: ~₹200", // User updated this previously
-            mapLink: "https://maps.app.goo.gl/81WFt2yXqjDjbgbm6",
-          ),
-          SizedBox(height: 24),
-          _buildEateryDestinationCard(
-            context,
-            title: "Bits and Bytes",
-            distance: "4.3 kms",
-            images: [eateryBitsBytes],
-            description: "A popular coffee shop and bakery offering a cozy ambiance. Enjoy a variety of pizzas, sandwiches, thick shakes, and freshly baked pastries.",
-            duration: "Recommended Rental Duration: 2 hrs",
-            priceInfo: "Price for two: ~₹600",
-            mapLink: "https://maps.app.goo.gl/nhrWCfc12a2kCQTq7",
-          ),
-          SizedBox(height: 24),
-          _buildEateryDestinationCard(
-            context,
-            title: "Taaza",
-            distance: "4.5 kms",
-            images: [eateryTaaza],
-            description: "A popular spot for all-day breakfast, serving fresh and hot South Indian tiffins like idlis, vadas, and dosas in a hygienic setting.",
-            duration: "Recommended Rental Duration: 2 hrs",
-            priceInfo: "Price for two: ~₹400",
-            mapLink: "https://maps.app.goo.gl/Ens9dVZtf34u6ous9",
-          ),
-          SizedBox(height: 24),
-          _buildEateryDestinationCard(
-            context,
-            title: "Katha Kitchen",
-            distance: "4.5 kms",
-            images: [eateryKatha],
-            description: "A cozy spot offering all-day breakfast, lunch, and snacks. Perfect for enjoying authentic South Indian meals and tiffins with friends.",
-            duration: "Recommended Rental Duration: 2 hrs",
-            priceInfo: "Price for two: ~₹400",
-            mapLink: "https://maps.app.goo.gl/ermsZTYb8FxXGjxG9",
-          ),
-          SizedBox(height: 24),
-          _buildEateryDestinationCard(
-            context,
-            title: "Punjabi Haveli Dhaba",
-            distance: "4.3 kms",
-            images: [eateryHaveli],
-            description: "Authentic Punjabi dhaba with a vibrant atmosphere, featuring unique truck decor and traditional cot seating. Famous for its tandoori kulchas and Bahubali lassi.",
-            duration: "Recommended Rental Duration: 2 hrs",
-            priceInfo: "Price for two: ~₹1000",
-            mapLink: "https://maps.app.goo.gl/aYqwDLKwk31nsgy78",
-          ),
-          SizedBox(height: 24),
-          _buildEateryDestinationCard(
-            context,
-            title: "Sereno Cafe",
-            distance: "4.4 kms",
-            images: [eaterySereno],
-            description: "An elegant cafe blending tradition with innovation. Offers a cozy yet refined atmosphere perfect for coffee, quick bites, and extended gatherings.",
-            duration: "Recommended Rental Duration: 2 hrs",
-            priceInfo: "Price for two: ~₹800",
-            mapLink: "https://maps.app.goo.gl/wATTZRRQgSUm3Cv4A",
-          ),
-          SizedBox(height: 24),
-          _buildEateryDestinationCard(
-            context,
-            title: "Aalankrita",
-            distance: "4.3 kms",
-            images: [eateryAalankrita],
-            description: "Experience fine dining at its best with multi-cuisine options and a luxurious ambiance. Perfect for special occasions and enjoying a premium meal.",
-            duration: "Recommended Rental Duration: 2 hrs",
-            priceInfo: "Price for two: ~₹1200",
-            mapLink: "https://maps.app.goo.gl/Q3BL3w4W213a1PyP9", 
-          ),
+          _buildCard(context, title: "Tandoor Restaurant", distance: "3.7 kms", images: [eateryTandoor], description: "Known for its rich Tandoori dishes and diverse multi-cuisine menu. A great spot for a hearty meal.", duration: "Recommended: 2 hrs rental", priceInfo: "~₹600 for two", mapLink: "https://maps.app.goo.gl/5fFHXuaevAHBc8bY7"),
+          const SizedBox(height: 16),
+          _buildCard(context, title: "Hotel Shree Krishna Udupi", distance: "3.7 kms", images: [eateryUdupi], description: "Authentic South Indian vegetarian cuisine — dosas, idlis, and thalis. Quick and delicious.", duration: "Recommended: 2 hrs rental", priceInfo: "~₹200 for two", mapLink: "https://maps.app.goo.gl/81WFt2yXqjDjbgbm6"),
+          const SizedBox(height: 16),
+          _buildCard(context, title: "Bits and Bytes", distance: "4.3 kms", images: [eateryBitsBytes], description: "Coffee shop & bakery with cozy ambiance. Pizzas, sandwiches, thick shakes, and freshly baked pastries.", duration: "Recommended: 2 hrs rental", priceInfo: "~₹600 for two", mapLink: "https://maps.app.goo.gl/nhrWCfc12a2kCQTq7"),
+          const SizedBox(height: 16),
+          _buildCard(context, title: "Taaza", distance: "4.5 kms", images: [eateryTaaza], description: "Popular all-day breakfast spot — fresh South Indian tiffins: idlis, vadas, and dosas.", duration: "Recommended: 2 hrs rental", priceInfo: "~₹400 for two", mapLink: "https://maps.app.goo.gl/Ens9dVZtf34u6ous9"),
+          const SizedBox(height: 16),
+          _buildCard(context, title: "Katha Kitchen", distance: "4.5 kms", images: [eateryKatha], description: "Cozy all-day spot with authentic South Indian meals and tiffins.", duration: "Recommended: 2 hrs rental", priceInfo: "~₹400 for two", mapLink: "https://maps.app.goo.gl/ermsZTYb8FxXGjxG9"),
+          const SizedBox(height: 16),
+          _buildCard(context, title: "Punjabi Haveli Dhaba", distance: "4.3 kms", images: [eateryHaveli], description: "Authentic Punjabi dhaba — tandoori kulchas and Bahubali lassi in a vibrant truck-decor setting.", duration: "Recommended: 2 hrs rental", priceInfo: "~₹1000 for two", mapLink: "https://maps.app.goo.gl/aYqwDLKwk31nsgy78"),
+          const SizedBox(height: 16),
+          _buildCard(context, title: "Sereno Cafe", distance: "4.4 kms", images: [eaterySereno], description: "Elegant cafe — cozy yet refined. Perfect for coffee, quick bites, and extended gatherings.", duration: "Recommended: 2 hrs rental", priceInfo: "~₹800 for two", mapLink: "https://maps.app.goo.gl/wATTZRRQgSUm3Cv4A"),
+          const SizedBox(height: 16),
+          _buildCard(context, title: "Aalankrita", distance: "4.3 kms", images: [eateryAalankrita], description: "Fine dining with multi-cuisine options and luxurious ambiance. Great for special occasions.", duration: "Recommended: 2 hrs rental", priceInfo: "~₹1200 for two", mapLink: "https://maps.app.goo.gl/Q3BL3w4W213a1PyP9"),
+          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  Widget _buildEateryDestinationCard(
-    BuildContext context, {
+  Widget _buildCard(BuildContext context, {
     required String title,
     required String distance,
     required List<String> images,
@@ -124,148 +46,77 @@ class EateriesScreen extends StatelessWidget {
     required String duration,
     required String priceInfo,
     String? mapLink,
-    double titleFontSize = 22, // Default size
   }) {
     return GestureDetector(
       onTap: mapLink != null ? () => _launchMaps(mapLink) : null,
       child: Container(
         decoration: BoxDecoration(
-          color: Color(0xFF1E1E1E),
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 10, offset: Offset(0, 5))],
+          color: kSurface1,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: kBorder),
         ),
         clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // IMAGE DISPLAY (Carousel vs Single)
-            if (images.length > 1) 
-              CarouselSlider(
-                options: CarouselOptions(
-                  height: 200.0,
-                  viewportFraction: 1.0, 
-                  enableInfiniteScroll: true,
-                  autoPlay: true,
-                ),
-                items: images.map((i) {
-                  return Builder(
-                    builder: (BuildContext context) {
-                      return Container(
-                        width: MediaQuery.of(context).size.width,
-                        decoration: BoxDecoration(color: Colors.black),
-                        child: i.isNotEmpty 
-                          ? Image.memory(
-                              base64Decode(i),
-                              fit: BoxFit.cover,
-                              errorBuilder: (c, e, s) => Center(child: Icon(Icons.broken_image, size: 50, color: Colors.white24)),
-                            )
-                          : Center(child: Icon(Icons.image_not_supported, color: Colors.white24, size: 50)),
-                      );
-                    },
-                  );
-                }).toList(),
-              )
-            else 
-              Container(
-                height: 200.0,
-                width: double.infinity,
-                decoration: BoxDecoration(color: Colors.black),
-                child: images.isNotEmpty && images.first.isNotEmpty
-                  ? Image.memory(
-                      base64Decode(images.first),
-                      fit: BoxFit.cover,
-                      errorBuilder: (c, e, s) => Center(child: Icon(Icons.broken_image, size: 50, color: Colors.white24)),
-                    )
-                  : Center(child: Icon(Icons.image_not_supported, color: Colors.white24, size: 50)),
-              ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Image
+          if (images.length > 1)
+            CarouselSlider(
+              options: CarouselOptions(height: 200, viewportFraction: 1.0, enableInfiniteScroll: true, autoPlay: true),
+              items: images.map((i) => _imageWidget(i)).toList(),
+            )
+          else
+            SizedBox(height: 200, width: double.infinity, child: _imageWidget(images.isNotEmpty ? images.first : '')),
 
-            // DETAILS
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded( // Added Expanded to text to prevent overflow
-                        child: Text(
-                          title,
-                          style: GoogleFonts.poppins(
-                            fontSize: titleFontSize, // Use the dynamic font size
-                            fontWeight: FontWeight.bold, 
-                            color: Colors.white
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.blueAccent.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.blueAccent.withOpacity(0.5))
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.directions_bike, size: 16, color: Colors.blueAccent),
-                            SizedBox(width: 4),
-                            Text(distance, style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      )
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    description,
-                    style: TextStyle(color: Colors.grey[400], fontSize: 14),
-                  ),
-                  SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Icon(Icons.access_time_filled, size: 16, color: Colors.orange),
-                      SizedBox(width: 6),
-                      Text(
-                        duration,
-                        style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(Icons.currency_rupee, size: 16, color: Colors.green), // Changed icon to currency
-                      SizedBox(width: 6),
-                      Text(
-                        priceInfo,
-                        style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Text(
-                        "View on Maps", 
-                        style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)
-                      ),
-                      Icon(Icons.arrow_forward, size: 16, color: Colors.blue),
-                    ],
-                  )
-                ],
-              ),
-            ),
-          ],
-        ),
+          // Content
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(
+                  child: Text(title, style: GoogleFonts.inter(color: kTextPrimary, fontSize: 17, fontWeight: FontWeight.bold)),
+                ),
+                rentXBadge(distance, color: kAccentCyan),
+              ]),
+              const SizedBox(height: 8),
+              Text(description, style: const TextStyle(color: kTextMuted, fontSize: 13, height: 1.5)),
+              const SizedBox(height: 12),
+              Row(children: [
+                const Icon(Icons.access_time_rounded, size: 14, color: kAccentOrange),
+                const SizedBox(width: 6),
+                Text(duration, style: const TextStyle(color: kAccentOrange, fontWeight: FontWeight.w600, fontSize: 12)),
+              ]),
+              const SizedBox(height: 6),
+              Row(children: [
+                const Icon(Icons.currency_rupee_rounded, size: 14, color: kAccentGreen),
+                const SizedBox(width: 6),
+                Text(priceInfo, style: const TextStyle(color: kAccentGreen, fontWeight: FontWeight.w600, fontSize: 12)),
+              ]),
+              if (mapLink != null) ...[
+                const SizedBox(height: 14),
+                Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  Text("View on Maps", style: TextStyle(color: kAccentCyan, fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_forward_rounded, size: 14, color: kAccentCyan),
+                ]),
+              ],
+            ]),
+          ),
+        ]),
       ),
+    );
+  }
+
+  Widget _imageWidget(String base64) {
+    if (base64.isEmpty) return const Center(child: Icon(Icons.image_not_supported_outlined, color: kTextDim, size: 40));
+    return Image.memory(
+      base64Decode(base64),
+      fit: BoxFit.cover,
+      width: double.infinity,
+      errorBuilder: (c, e, s) => const Center(child: Icon(Icons.broken_image_outlined, size: 40, color: kTextDim)),
     );
   }
 
   Future<void> _launchMaps(String urlString) async {
     final Uri url = Uri.parse(urlString);
-    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      throw Exception('Could not launch $url');
-    }
+    await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 }

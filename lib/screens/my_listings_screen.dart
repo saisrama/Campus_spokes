@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert';
+import '../theme/app_theme.dart';
 import 'add_cycle_screen.dart';
 import 'add_item_screen.dart';
 import 'add_sale_item_screen.dart';
 import 'cycle_history_screen.dart';
 
 class MyListingsScreen extends StatelessWidget {
+  const MyListingsScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -15,18 +18,21 @@ class MyListingsScreen extends StatelessWidget {
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        backgroundColor: Color(0xFF121212),
+        backgroundColor: kBgColor,
         appBar: AppBar(
-          backgroundColor: Color(0xFF1E1E1E),
-          title: Text("My Listings"),
-          bottom: TabBar(
-            indicatorColor: Colors.indigoAccent,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.grey,
+          backgroundColor: kBgColor,
+          elevation: 0,
+          surfaceTintColor: Colors.transparent,
+          iconTheme: const IconThemeData(color: kTextPrimary),
+          title: const Text("My Listings", style: TextStyle(fontWeight: FontWeight.bold, color: kTextPrimary, fontSize: 18, letterSpacing: -0.3)),
+          bottom: const TabBar(
+            indicatorColor: kTextPrimary,
+            labelColor: kTextPrimary,
+            unselectedLabelColor: kTextDim,
             tabs: [
-              Tab(icon: Icon(Icons.pedal_bike), text: "Cycles"),
-              Tab(icon: Icon(Icons.inventory_2_outlined), text: "Items"),
-              Tab(icon: Icon(Icons.sell_outlined), text: "Sales"),
+              Tab(icon: Icon(Icons.pedal_bike_outlined, size: 18), text: "Cycles"),
+              Tab(icon: Icon(Icons.inventory_2_outlined, size: 18), text: "Items"),
+              Tab(icon: Icon(Icons.sell_outlined, size: 18), text: "Sales"),
             ],
           ),
         ),
@@ -46,104 +52,51 @@ class MyListingsScreen extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection('cycles')
           .where('ownerId', isEqualTo: user?.uid)
-          .orderBy('createdAt', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator());
-        if (snapshot.hasError) return Center(child: Text("Error loading cycles: ${snapshot.error}", style: TextStyle(color: Colors.white)));
-
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: kTextPrimary, strokeWidth: 2));
+        if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: kAccentRed)));
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.pedal_bike, size: 60, color: Colors.grey),
-                SizedBox(height: 10),
-                Text("You haven't listed any cycles yet.", style: TextStyle(color: Colors.grey)),
-                SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddCycleScreen())),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.white),
-                  child: Text("LIST A CYCLE NOW", style: TextStyle(color: Colors.black)),
-                )
-              ],
+          return rentXEmptyState(
+            icon: Icons.pedal_bike_outlined,
+            message: "No cycles listed yet",
+            subMessage: "List your cycle and start earning from rentals.",
+            action: ElevatedButton(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddCycleScreen())),
+              style: ElevatedButton.styleFrom(backgroundColor: kTextPrimary, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
+              child: const Text("List a Cycle", style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           );
         }
-
-        var docs = snapshot.data!.docs;
-
+        final docs = snapshot.data!.docs.toList()
+          ..sort((a, b) {
+            final aData = a.data() as Map<String, dynamic>;
+            final bData = b.data() as Map<String, dynamic>;
+            final aTime = aData['createdAt'] != null ? (aData['createdAt'] as Timestamp).toDate() : DateTime(2000);
+            final bTime = bData['createdAt'] != null ? (bData['createdAt'] as Timestamp).toDate() : DateTime(2000);
+            return bTime.compareTo(aTime);
+          });
         return ListView.builder(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           itemCount: docs.length,
           itemBuilder: (context, index) {
-            var data = docs[index].data() as Map<String, dynamic>;
-            String cycleId = docs[index].id;
-            bool ownerDisabled = data['ownerDisabled'] ?? false;
-
-            return Card(
-              color: Color(0xFF1E1E1E),
-              margin: EdgeInsets.only(bottom: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Column(
-                children: [
-                  ListTile(
-                    onTap: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => CycleHistoryScreen(cycleId: cycleId, cycleData: data)));
-                    },
-                    contentPadding: EdgeInsets.all(12),
-                    leading: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: _buildImage(data['imageUrl'] ?? "", width: 60, height: 60),
-                    ),
-                    title: Text(
-                      "${data['modelName']} - ${data['gearType'] ?? 'Single Geared'}",
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
-                    ),
-                    subtitle: Text("₹${data['basePrice']} / 2hrs • ${data['location']}", style: TextStyle(color: Colors.grey)),
-                    trailing: Switch(
-                      value: !ownerDisabled,
-                      activeColor: Colors.green,
-                      onChanged: (val) {
-                        FirebaseFirestore.instance.collection('cycles').doc(cycleId).update({'ownerDisabled': !val});
-                      },
-                    ),
-                  ),
-                  Divider(color: Colors.white12),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        TextButton.icon(
-                          icon: Icon(Icons.comment, color: Colors.amber),
-                          label: Text("REVIEWS", style: TextStyle(color: Colors.amber)),
-                          onPressed: () => _showReviewsBottomSheet(context, cycleId, isItem: false),
-                        ),
-                        TextButton.icon(
-                          icon: Icon(Icons.edit, color: Colors.blue),
-                          label: Text("EDIT", style: TextStyle(color: Colors.blue)),
-                          onPressed: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => AddCycleScreen(cycleData: data, cycleId: cycleId)));
-                          },
-                        ),
-                        TextButton.icon(
-                          icon: Icon(Icons.delete, color: Colors.red),
-                          label: Text("DELETE", style: TextStyle(color: Colors.red)),
-                          onPressed: () => _confirmDelete(context, cycleId, collection: 'cycles'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (ownerDisabled)
-                    Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.all(4),
-                      color: Colors.amber.withOpacity(0.2),
-                      child: Text("Currently Delisted (Hidden from Home)", textAlign: TextAlign.center, style: TextStyle(color: Colors.amber, fontSize: 10)),
-                    )
-                ],
-              ),
+            final data = docs[index].data() as Map<String, dynamic>;
+            final cycleId = docs[index].id;
+            final bool ownerDisabled = data['ownerDisabled'] ?? false;
+            return _listingCard(
+              context: context,
+              imageUrl: data['imageUrl'] ?? '',
+              title: "${data['modelName']} – ${data['gearType'] ?? 'Single Geared'}",
+              subtitle: "₹${data['basePrice']} / 2hrs  •  ${data['location']}",
+              ownerDisabled: ownerDisabled,
+              isSold: false,
+              onToggle: (val) => FirebaseFirestore.instance.collection('cycles').doc(cycleId).update({'ownerDisabled': !val}),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CycleHistoryScreen(cycleId: cycleId, cycleData: data))),
+              actions: [
+                _actionBtn(icon: Icons.comment_outlined, label: "Reviews", color: kAccentAmber, onTap: () => _showReviews(context, cycleId, isItem: false)),
+                _actionBtn(icon: Icons.edit_outlined, label: "Edit", color: kAccentCyan, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddCycleScreen(cycleData: data, cycleId: cycleId)))),
+                _actionBtn(icon: Icons.delete_outline, label: "Delete", color: kAccentRed, onTap: () => _confirmDelete(context, cycleId, collection: 'cycles')),
+              ],
             );
           },
         );
@@ -156,104 +109,54 @@ class MyListingsScreen extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection('items')
           .where('ownerId', isEqualTo: user?.uid)
-          .orderBy('createdAt', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: Colors.indigoAccent));
-        if (snapshot.hasError) return Center(child: Text("Error loading items: ${snapshot.error}", style: TextStyle(color: Colors.white)));
-
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: kTextPrimary, strokeWidth: 2));
+        if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: kAccentRed)));
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.inventory_2_outlined, size: 60, color: Colors.grey),
-                SizedBox(height: 10),
-                Text("You haven't listed any items yet.", style: TextStyle(color: Colors.grey)),
-                SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddItemScreen())),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.indigoAccent),
-                  child: Text("LIST AN ITEM NOW", style: TextStyle(color: Colors.white)),
-                )
-              ],
+          return rentXEmptyState(
+            icon: Icons.inventory_2_outlined,
+            message: "No items listed yet",
+            subMessage: "List items for rent and let students borrow from you.",
+            action: ElevatedButton(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddItemScreen())),
+              style: ElevatedButton.styleFrom(backgroundColor: kTextPrimary, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
+              child: const Text("List an Item", style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           );
         }
-
-        var docs = snapshot.data!.docs;
-
+        final docs = snapshot.data!.docs.toList()
+          ..sort((a, b) {
+            final aData = a.data() as Map<String, dynamic>;
+            final bData = b.data() as Map<String, dynamic>;
+            final aTime = aData['createdAt'] != null ? (aData['createdAt'] as Timestamp).toDate() : DateTime(2000);
+            final bTime = bData['createdAt'] != null ? (bData['createdAt'] as Timestamp).toDate() : DateTime(2000);
+            return bTime.compareTo(aTime);
+          });
         return ListView.builder(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           itemCount: docs.length,
           itemBuilder: (context, index) {
-            var data = docs[index].data() as Map<String, dynamic>;
-            String itemId = docs[index].id;
-            bool ownerDisabled = data['ownerDisabled'] ?? false;
-            String itemName = data['itemName'] ?? 'Item';
-            String itemType = data['itemType'] ?? 'General';
-            String location = data['location'] ?? 'Campus';
-
-            return Card(
-              color: Color(0xFF1E1E1E),
-              margin: EdgeInsets.only(bottom: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Column(
-                children: [
-                  ListTile(
-                    contentPadding: EdgeInsets.all(12),
-                    leading: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: _buildImage(data['imageUrl'] ?? "", width: 60, height: 60),
-                    ),
-                    title: Text(
-                      "$itemName - $itemType",
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
-                    ),
-                    subtitle: Text("₹${data['basePrice']} / 2hrs • Collect: $location Bhavan", style: TextStyle(color: Colors.grey)),
-                    trailing: Switch(
-                      value: !ownerDisabled,
-                      activeColor: Colors.green,
-                      onChanged: (val) {
-                        FirebaseFirestore.instance.collection('items').doc(itemId).update({'ownerDisabled': !val});
-                      },
-                    ),
-                  ),
-                  Divider(color: Colors.white12),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        TextButton.icon(
-                          icon: Icon(Icons.comment, color: Colors.amber),
-                          label: Text("REVIEWS", style: TextStyle(color: Colors.amber)),
-                          onPressed: () => _showReviewsBottomSheet(context, itemId, isItem: true),
-                        ),
-                        TextButton.icon(
-                          icon: Icon(Icons.edit, color: Colors.blue),
-                          label: Text("EDIT", style: TextStyle(color: Colors.blue)),
-                          onPressed: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => AddItemScreen(itemData: data, itemId: itemId)));
-                          },
-                        ),
-                        TextButton.icon(
-                          icon: Icon(Icons.delete, color: Colors.red),
-                          label: Text("DELETE", style: TextStyle(color: Colors.red)),
-                          onPressed: () => _confirmDelete(context, itemId, collection: 'items'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (ownerDisabled)
-                    Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.all(4),
-                      color: Colors.amber.withOpacity(0.2),
-                      child: Text("Currently Delisted (Hidden from Feed)", textAlign: TextAlign.center, style: TextStyle(color: Colors.amber, fontSize: 10)),
-                    )
-                ],
-              ),
+            final data = docs[index].data() as Map<String, dynamic>;
+            final itemId = docs[index].id;
+            final bool ownerDisabled = data['ownerDisabled'] ?? false;
+            final String itemName = data['itemName'] ?? 'Item';
+            final String itemType = data['itemType'] ?? 'General';
+            final String location = data['location'] ?? 'Campus';
+            return _listingCard(
+              context: context,
+              imageUrl: data['imageUrl'] ?? '',
+              title: "$itemName – $itemType",
+              subtitle: "₹${data['basePrice']} / 2hrs  •  Collect: $location Bhavan",
+              ownerDisabled: ownerDisabled,
+              isSold: false,
+              onToggle: (val) => FirebaseFirestore.instance.collection('items').doc(itemId).update({'ownerDisabled': !val}),
+              onTap: null,
+              actions: [
+                _actionBtn(icon: Icons.comment_outlined, label: "Reviews", color: kAccentAmber, onTap: () => _showReviews(context, itemId, isItem: true)),
+                _actionBtn(icon: Icons.edit_outlined, label: "Edit", color: kAccentCyan, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddItemScreen(itemData: data, itemId: itemId)))),
+                _actionBtn(icon: Icons.delete_outline, label: "Delete", color: kAccentRed, onTap: () => _confirmDelete(context, itemId, collection: 'items')),
+              ],
             );
           },
         );
@@ -266,119 +169,60 @@ class MyListingsScreen extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection('sale_items')
           .where('ownerId', isEqualTo: user?.uid)
-          .orderBy('createdAt', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: Colors.orangeAccent));
-        if (snapshot.hasError) return Center(child: Text("Error loading sales: ${snapshot.error}", style: TextStyle(color: Colors.white)));
-
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: kTextPrimary, strokeWidth: 2));
+        if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: kAccentRed)));
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.sell_outlined, size: 60, color: Colors.grey),
-                SizedBox(height: 10),
-                Text("You haven't listed any items for sale.", style: TextStyle(color: Colors.grey)),
-                SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddSaleItemScreen())),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent),
-                  child: Text("SELL AN ITEM NOW", style: TextStyle(color: Colors.white)),
-                )
-              ],
+          return rentXEmptyState(
+            icon: Icons.sell_outlined,
+            message: "No sale items listed yet",
+            subMessage: "Sell your old stuff to fellow students.",
+            action: ElevatedButton(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddSaleItemScreen())),
+              style: ElevatedButton.styleFrom(backgroundColor: kTextPrimary, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
+              child: const Text("Sell an Item", style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           );
         }
-
-        var docs = snapshot.data!.docs;
-
+        final docs = snapshot.data!.docs.toList()
+          ..sort((a, b) {
+            final aData = a.data() as Map<String, dynamic>;
+            final bData = b.data() as Map<String, dynamic>;
+            final aTime = aData['createdAt'] != null ? (aData['createdAt'] as Timestamp).toDate() : DateTime(2000);
+            final bTime = bData['createdAt'] != null ? (bData['createdAt'] as Timestamp).toDate() : DateTime(2000);
+            return bTime.compareTo(aTime);
+          });
         return ListView.builder(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           itemCount: docs.length,
           itemBuilder: (context, index) {
-            var data = docs[index].data() as Map<String, dynamic>;
-            String itemId = docs[index].id;
-            bool ownerDisabled = data['ownerDisabled'] ?? false;
-            bool isSold = data['isSold'] ?? false;
-            String itemName = data['itemName'] ?? 'Item';
-            String itemType = data['itemType'] ?? 'General';
-            int price = data['price'] ?? 0;
-
-            return Card(
-              color: Color(0xFF1E1E1E),
-              margin: EdgeInsets.only(bottom: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Column(
-                children: [
-                  ListTile(
-                    contentPadding: EdgeInsets.all(12),
-                    leading: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: _buildImage(data['imageUrl'] ?? "", width: 60, height: 60),
-                    ),
-                    title: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            "$itemName - $itemType",
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
-                          ),
-                        ),
-                        if (isSold)
-                          Container(
-                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(8)),
-                            child: Text("SOLD", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                          )
-                      ],
-                    ),
-                    subtitle: Text("₹$price • Cond: ${data['condition'] ?? 'Good'}", style: TextStyle(color: Colors.grey)),
-                    trailing: Switch(
-                      value: !ownerDisabled,
-                      activeColor: Colors.green,
-                      onChanged: (val) {
-                        FirebaseFirestore.instance.collection('sale_items').doc(itemId).update({'ownerDisabled': !val});
-                      },
-                    ),
-                  ),
-                  Divider(color: Colors.white12),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        TextButton.icon(
-                          icon: Icon(isSold ? Icons.undo : Icons.check_circle, color: isSold ? Colors.grey : Colors.green),
-                          label: Text(isSold ? "AVAILABLE" : "MARK SOLD", style: TextStyle(color: isSold ? Colors.grey : Colors.green)),
-                          onPressed: () {
-                            FirebaseFirestore.instance.collection('sale_items').doc(itemId).update({'isSold': !isSold});
-                          },
-                        ),
-                        TextButton.icon(
-                          icon: Icon(Icons.edit, color: Colors.blue),
-                          label: Text("EDIT", style: TextStyle(color: Colors.blue)),
-                          onPressed: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => AddSaleItemScreen(itemData: data, itemId: itemId)));
-                          },
-                        ),
-                        TextButton.icon(
-                          icon: Icon(Icons.delete, color: Colors.red),
-                          label: Text("DELETE", style: TextStyle(color: Colors.red)),
-                          onPressed: () => _confirmDelete(context, itemId, collection: 'sale_items'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (ownerDisabled)
-                    Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.all(4),
-                      color: Colors.amber.withOpacity(0.2),
-                      child: Text("Currently Delisted (Hidden from Feed)", textAlign: TextAlign.center, style: TextStyle(color: Colors.amber, fontSize: 10)),
-                    )
-                ],
-              ),
+            final data = docs[index].data() as Map<String, dynamic>;
+            final itemId = docs[index].id;
+            final bool ownerDisabled = data['ownerDisabled'] ?? false;
+            final bool isSold = data['isSold'] ?? false;
+            final String itemName = data['itemName'] ?? 'Item';
+            final String itemType = data['itemType'] ?? 'General';
+            final int price = data['price'] ?? 0;
+            return _listingCard(
+              context: context,
+              imageUrl: data['imageUrl'] ?? '',
+              title: "$itemName – $itemType",
+              subtitle: "₹$price  •  Condition: ${data['condition'] ?? 'Good'}",
+              ownerDisabled: ownerDisabled,
+              isSold: isSold,
+              onToggle: (val) => FirebaseFirestore.instance.collection('sale_items').doc(itemId).update({'ownerDisabled': !val}),
+              onTap: null,
+              actions: [
+                _actionBtn(
+                  icon: isSold ? Icons.undo_rounded : Icons.check_circle_outline,
+                  label: isSold ? "Available" : "Mark Sold",
+                  color: isSold ? kTextMuted : kAccentGreen,
+                  onTap: () => FirebaseFirestore.instance.collection('sale_items').doc(itemId).update({'isSold': !isSold}),
+                ),
+                _actionBtn(icon: Icons.edit_outlined, label: "Edit", color: kAccentCyan, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddSaleItemScreen(itemData: data, itemId: itemId)))),
+                _actionBtn(icon: Icons.delete_outline, label: "Delete", color: kAccentRed, onTap: () => _confirmDelete(context, itemId, collection: 'sale_items')),
+              ],
             );
           },
         );
@@ -386,17 +230,91 @@ class MyListingsScreen extends StatelessWidget {
     );
   }
 
+  Widget _listingCard({
+    required BuildContext context,
+    required String imageUrl,
+    required String title,
+    required String subtitle,
+    required bool ownerDisabled,
+    required bool isSold,
+    required Function(bool) onToggle,
+    required VoidCallback? onTap,
+    required List<Widget> actions,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: kSurface1,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: kBorder),
+      ),
+      child: Column(children: [
+        InkWell(
+          onTap: onTap,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: _buildImage(imageUrl, width: 64, height: 64),
+              ),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: kTextPrimary))),
+                  if (isSold) rentXBadge("SOLD", color: kAccentRed),
+                ]),
+                const SizedBox(height: 4),
+                Text(subtitle, style: const TextStyle(color: kTextMuted, fontSize: 12)),
+              ])),
+              Switch(
+                value: !ownerDisabled,
+                activeThumbColor: kAccentGreen,
+                inactiveThumbColor: kTextDim,
+                inactiveTrackColor: kSurface2,
+                onChanged: onToggle,
+              ),
+            ]),
+          ),
+        ),
+        Container(height: 1, color: kBorder),
+        if (ownerDisabled)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            color: kAccentAmber.withValues(alpha: 0.08),
+            child: const Text("Currently Delisted — hidden from feed", textAlign: TextAlign.center, style: TextStyle(color: kAccentAmber, fontSize: 10, fontWeight: FontWeight.w600)),
+          ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: actions),
+        ),
+      ]),
+    );
+  }
+
+  Widget _actionBtn({required IconData icon, required String label, required Color color, required VoidCallback onTap}) {
+    return TextButton.icon(
+      icon: Icon(icon, color: color, size: 16),
+      label: Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+      onPressed: onTap,
+      style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
+    );
+  }
+
   void _confirmDelete(BuildContext context, String docId, {required String collection}) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Color(0xFF1E1E1E),
-        title: Text("Delete Listing?", style: TextStyle(color: Colors.white)),
-        content: Text("This action cannot be undone.", style: TextStyle(color: Colors.white70)),
+      builder: (_) => AlertDialog(
+        backgroundColor: kSurface1,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: kBorder)),
+        title: const Text("Delete Listing?", style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
+        content: const Text("This action cannot be undone.", style: TextStyle(color: kTextMuted)),
         actions: [
-          TextButton(child: Text("Cancel", style: TextStyle(color: Colors.grey)), onPressed: () => Navigator.pop(context)),
+          TextButton(child: const Text("Cancel", style: TextStyle(color: kTextDim)), onPressed: () => Navigator.pop(context)),
           TextButton(
-            child: Text("Delete", style: TextStyle(color: Colors.red)),
+            child: const Text("Delete", style: TextStyle(color: kAccentRed, fontWeight: FontWeight.bold)),
             onPressed: () {
               FirebaseFirestore.instance.collection(collection).doc(docId).delete();
               Navigator.pop(context);
@@ -407,155 +325,92 @@ class MyListingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildImage(String? imageUrl, {double? width, double? height, double iconSize = 50}) {
-    if (imageUrl == null || imageUrl.isEmpty) {
-      return Container(
-        width: width, height: height,
-        color: Colors.grey[850],
-        child: Center(child: Icon(Icons.inventory_2, size: iconSize, color: Colors.white24)),
-      );
-    }
+  Widget _buildImage(String? imageUrl, {double? width, double? height}) {
+    final Widget placeholder = Container(
+      width: width, height: height,
+      color: kSurface2,
+      child: const Center(child: Icon(Icons.inventory_2_outlined, size: 28, color: kTextDim)),
+    );
+
+    if (imageUrl == null || imageUrl.isEmpty) return placeholder;
 
     if (imageUrl.startsWith('http')) {
-      return Image.network(
-        imageUrl,
-        width: width, height: height,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => Container(
-          width: width, height: height,
-          color: Colors.grey[850],
-          child: Center(child: Icon(Icons.inventory_2, size: iconSize, color: Colors.white24)),
-        ),
-      );
+      return Image.network(imageUrl, width: width, height: height, fit: BoxFit.cover, errorBuilder: (e, s, t) => placeholder);
     }
 
     try {
-      return Image.memory(
-        base64Decode(imageUrl),
-        width: width, height: height,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => Container(
-          width: width, height: height,
-          color: Colors.grey[850],
-          child: Center(child: Icon(Icons.broken_image, size: iconSize, color: Colors.white24)),
-        ),
-      );
+      return Image.memory(base64Decode(imageUrl), width: width, height: height, fit: BoxFit.cover, errorBuilder: (e, s, t) => placeholder);
     } catch (e) {
-      return Container(
-        width: width, height: height,
-        color: Colors.grey[850],
-        child: Center(child: Icon(Icons.error, size: iconSize, color: Colors.white24)),
-      );
+      return placeholder;
     }
   }
 
-  void _showReviewsBottomSheet(BuildContext context, String targetId, {required bool isItem}) {
+  void _showReviews(BuildContext context, String targetId, {required bool isItem}) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Color(0xFF1E1E1E),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) {
+      backgroundColor: kSurface1,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) {
         return Container(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text("Reviews", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-              SizedBox(height: 10),
+              Row(children: [
+                const Icon(Icons.star_rounded, color: kAccentAmber, size: 20),
+                const SizedBox(width: 8),
+                const Text("Reviews", style: TextStyle(color: kTextPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+              ]),
+              const SizedBox(height: 14),
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
                   stream: isItem
                       ? FirebaseFirestore.instance.collection('items').doc(targetId).collection('reviews').orderBy('createdAt', descending: true).snapshots()
                       : FirebaseFirestore.instance.collection('bookings').where('cycleId', isEqualTo: targetId).snapshots(),
                   builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator());
-                    if (snapshot.hasError) return Text("Error: ${snapshot.error}", style: TextStyle(color: Colors.red));
+                    if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: kTextPrimary, strokeWidth: 2));
+                    if (!snapshot.hasData) return const SizedBox.shrink();
 
-                    if (!isItem) {
-                      var docs = snapshot.data!.docs.where((d) {
-                        var data = d.data() as Map<String, dynamic>;
-                        return data.containsKey('rating') && (data['rating'] as num) > 0;
-                      }).toList();
+                    final List<QueryDocumentSnapshot> rawDocs = snapshot.data!.docs;
+                    final List<QueryDocumentSnapshot> docs = isItem
+                        ? rawDocs
+                        : rawDocs.where((d) {
+                            final data = d.data() as Map<String, dynamic>;
+                            return data.containsKey('rating') && (data['rating'] as num) > 0;
+                          }).toList();
 
-                      if (docs.isEmpty) return Center(child: Text("No reviews yet.", style: TextStyle(color: Colors.grey)));
-
-                      return ListView.builder(
-                        itemCount: docs.length,
-                        itemBuilder: (context, index) {
-                          var data = docs[index].data() as Map<String, dynamic>;
-                          double rating = (data['rating'] ?? 0.0).toDouble();
-                          String text = data['reviewText'] ?? "";
-
-                          return Container(
-                            margin: EdgeInsets.only(bottom: 10),
-                            padding: EdgeInsets.all(12),
-                            decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(10)),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(Icons.star, color: Colors.amber, size: 16),
-                                    Text(" $rating", style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
-                                  ],
-                                ),
-                                if (text.isNotEmpty) ...[
-                                  SizedBox(height: 5),
-                                  Text(text, style: TextStyle(color: Colors.white70)),
-                                ]
-                              ],
-                            ),
-                          );
-                        },
-                      );
-                    } else {
-                      var docs = snapshot.data!.docs;
-                      if (docs.isEmpty) return Center(child: Text("No reviews yet.", style: TextStyle(color: Colors.grey)));
-
-                      return ListView.builder(
-                        itemCount: docs.length,
-                        itemBuilder: (context, index) {
-                          var data = docs[index].data() as Map<String, dynamic>;
-                          int rating = data['rating'] ?? 5;
-                          String text = data['comment'] ?? "";
-                          String userName = data['userName'] ?? "Student";
-
-                          return Container(
-                            margin: EdgeInsets.only(bottom: 10),
-                            padding: EdgeInsets.all(12),
-                            decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(10)),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(userName, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                    Row(
-                                      children: List.generate(5, (i) {
-                                        return Icon(
-                                          i < rating ? Icons.star : Icons.star_border,
-                                          color: Colors.amber,
-                                          size: 14,
-                                        );
-                                      }),
-                                    )
-                                  ],
-                                ),
-                                if (text.isNotEmpty) ...[
-                                  SizedBox(height: 5),
-                                  Text(text, style: TextStyle(color: Colors.white70)),
-                                ]
-                              ],
-                            ),
-                          );
-                        },
-                      );
+                    if (docs.isEmpty) {
+                      return Center(child: Text("No reviews yet.", style: const TextStyle(color: kTextDim)));
                     }
+
+                    return ListView.builder(
+                      itemCount: docs.length,
+                      itemBuilder: (context, index) {
+                        final data = docs[index].data() as Map<String, dynamic>;
+                        final int rating = isItem ? (data['rating'] ?? 5) : ((data['rating'] as num?)?.toInt() ?? 0);
+                        final String text = isItem ? (data['comment'] ?? '') : (data['reviewText'] ?? '');
+                        final String userName = data['userName'] ?? 'Student';
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(color: kSurface2, borderRadius: BorderRadius.circular(12), border: Border.all(color: kBorder)),
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                              Text(userName, style: const TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                              Row(children: List.generate(5, (i) => Icon(i < rating ? Icons.star_rounded : Icons.star_border_rounded, color: kAccentAmber, size: 14))),
+                            ]),
+                            if (text.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(text, style: const TextStyle(color: kTextMuted, fontSize: 12)),
+                            ],
+                          ]),
+                        );
+                      },
+                    );
                   },
                 ),
-              )
+              ),
             ],
           ),
         );

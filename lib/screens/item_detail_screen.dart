@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
+import '../theme/app_theme.dart';
+import '../widgets/full_screen_image_viewer.dart';
 
 class ItemDetailScreen extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -25,18 +27,30 @@ class ItemDetailScreen extends StatefulWidget {
 
 class _ItemDetailScreenState extends State<ItemDetailScreen> {
   DateTime _startTime = DateTime.now();
-  DateTime _endTime = DateTime.now().add(Duration(hours: 2));
+  DateTime _endTime = DateTime.now().add(const Duration(hours: 2));
   double _totalCost = 0;
   double _durationInHours = 2.0;
 
   User? currentUser = FirebaseAuth.instance.currentUser;
   String? _bookingId;
-  String? _bookingStatus = 'none'; // none, booked, started, payment_pending, completed
+  String? _bookingStatus = 'none';
   DateTime? _scheduledStartTime;
   DateTime? _scheduledEndTime;
 
   final TextEditingController _reviewController = TextEditingController();
   int _selectedRating = 5;
+  int _currentImageIndex = 0;
+  final PageController _pageController = PageController();
+
+  List<String> get _allImageUrls {
+    if (widget.data['imageUrls'] is List && (widget.data['imageUrls'] as List).isNotEmpty) {
+      return List<String>.from(widget.data['imageUrls']);
+    }
+    if ((widget.data['imageUrl'] ?? '').isNotEmpty) {
+      return [widget.data['imageUrl']];
+    }
+    return [];
+  }
 
   @override
   void initState() {
@@ -50,10 +64,10 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     if (widget.initialEndTime != null) {
       _endTime = widget.initialEndTime!;
       if (_endTime.isBefore(_startTime)) {
-        _endTime = _startTime.add(Duration(hours: 2));
+        _endTime = _startTime.add(const Duration(hours: 2));
       }
     } else {
-      _endTime = _startTime.add(Duration(hours: 2));
+      _endTime = _startTime.add(const Duration(hours: 2));
     }
 
     _calculateCost();
@@ -98,72 +112,67 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
       _totalCost = basePrice.toDouble();
     } else {
       double extraHours = (_durationInHours - 2.0);
-      int extraHoursCeil = extraHours.ceil();
-      _totalCost = (basePrice + (extraHoursCeil * hourlyPrice)).toDouble();
+      _totalCost = basePrice.toDouble() + (extraHours * hourlyPrice);
     }
   }
 
-  Future<void> _selectStartTime() async {
-    final TimeOfDay? picked = await showTimePicker(
+  Future<void> _selectTime(bool isStart) async {
+    DateTime initial = isStart ? _startTime : _endTime;
+    TimeOfDay? pickedTime = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(_startTime),
+      initialTime: TimeOfDay.fromDateTime(initial),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(primary: kTextPrimary, surface: kSurface1),
+          ),
+          child: child!,
+        );
+      },
     );
-    if (picked != null) {
-      DateTime now = DateTime.now();
-      DateTime newStart = DateTime(now.year, now.month, now.day, picked.hour, picked.minute);
-      if (newStart.isBefore(now.subtract(Duration(minutes: 5)))) {
-        newStart = newStart.add(Duration(days: 1));
-      }
+
+    if (pickedTime != null) {
       setState(() {
-        _startTime = newStart;
-        if (_endTime.isBefore(_startTime)) {
-          _endTime = _startTime.add(Duration(hours: 2));
+        DateTime now = DateTime.now();
+        DateTime newDate = DateTime(now.year, now.month, now.day, pickedTime.hour, pickedTime.minute);
+        if (isStart) {
+          _startTime = newDate;
+          if (_endTime.isBefore(_startTime)) {
+            _endTime = _startTime.add(const Duration(hours: 2));
+          }
+        } else {
+          _endTime = newDate;
+          if (_endTime.isBefore(_startTime)) {
+            _endTime = _startTime.add(const Duration(hours: 1));
+          }
         }
         _calculateCost();
       });
     }
   }
 
-  Future<void> _selectEndTime() async {
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(_endTime),
-    );
-    if (picked != null) {
-      DateTime newEnd = DateTime(_startTime.year, _startTime.month, _startTime.day, picked.hour, picked.minute);
-      if (newEnd.isBefore(_startTime)) {
-        newEnd = newEnd.add(Duration(days: 1));
-      }
-      setState(() {
-        _endTime = newEnd;
-        _calculateCost();
-      });
+  Future<void> _bookItem() async {
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please log in to book items.")));
+      return;
     }
-  }
 
-  Future<void> _createBooking() async {
     try {
       var ref = await FirebaseFirestore.instance.collection('bookings').add({
         'userId': currentUser!.uid,
-        'renterName': currentUser!.displayName ?? 'Student',
-        'ownerId': widget.data['ownerId'],
+        'renterName': currentUser!.displayName ?? 'User',
+        'renterPhone': currentUser!.phoneNumber ?? '',
         'itemId': widget.itemId,
-        'itemType': 'generic',
+        'itemData': widget.data,
+        'ownerId': widget.data['ownerId'],
         'status': 'booked',
-        'createdAt': FieldValue.serverTimestamp(),
+        'scheduledStartTime': Timestamp.fromDate(_startTime),
+        'scheduledEndTime': Timestamp.fromDate(_endTime),
+        'estimatedDurationHours': _durationInHours,
         'basePrice': widget.data['basePrice'],
         'hourlyPrice': widget.data['hourlyPrice'],
-        'itemData': widget.data,
-        'cycleData': {
-          'modelName': widget.data['itemName'],
-          'location': widget.data['location'],
-          'gearType': widget.data['itemType'],
-          'imageUrl': widget.data['imageUrl'],
-        },
-        'ownerName': widget.data['ownerName'] ?? 'Student',
-        'ownerPhone': widget.data['ownerPhone'] ?? 'N/A',
-        'scheduledStartTime': _startTime,
-        'scheduledEndTime': _endTime,
+        'estimatedCost': _totalCost,
+        'createdAt': FieldValue.serverTimestamp(),
       });
 
       setState(() {
@@ -173,20 +182,21 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
         _scheduledEndTime = _endTime;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Item Reserved Successfully!")),
-      );
-
-      _openWhatsApp();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Item Booked Successfully!"), backgroundColor: kSurface1));
+      }
+      _contactOwnerOnWhatsApp();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Booking Failed: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Booking Failed: $e"), backgroundColor: Colors.redAccent));
+      }
     }
   }
 
-  Future<void> _openWhatsApp() async {
-    String phone = widget.data['ownerPhone'] ?? '';
-    if (phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Owner phone number not provided")));
+  Future<void> _contactOwnerOnWhatsApp() async {
+    String? phone = widget.data['ownerPhone'];
+    if (phone == null || phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Owner phone number not provided.")));
       return;
     }
     String cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
@@ -196,13 +206,15 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
 
     String startFmt = DateFormat('h:mm a').format(_startTime);
     String endFmt = DateFormat('h:mm a').format(_endTime);
-    String msg = "Hi ${widget.data['ownerName']}, I have booked your item '${widget.data['itemName']}' on Campus Spokes for $startFmt - $endFmt. My room is ${widget.data['roomNumber'] ?? 'N/A'}. Please coordinate pick-up at ${widget.data['location']} Bhavan.";
+    String msg = "Hi ${widget.data['ownerName']}, I have booked your item '${widget.data['itemName']}' on RentX for $startFmt - $endFmt. My room is ${widget.data['roomNumber'] ?? 'N/A'}. Please coordinate pick-up at ${widget.data['location']} Bhavan.";
 
     final Uri url = Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encodeComponent(msg)}");
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Could not launch WhatsApp")));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Could not launch WhatsApp")));
+      }
     }
   }
 
@@ -213,7 +225,9 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
       'startTime': FieldValue.serverTimestamp(),
     });
     setState(() => _bookingStatus = 'started');
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Rental Session Started!")));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Rental Session Started!"), backgroundColor: kSurface1));
+    }
   }
 
   Future<void> _endSession() async {
@@ -233,33 +247,31 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: Color(0xFF1E1E1E),
-        title: Text("Payment Details", style: TextStyle(color: Colors.white)),
+        backgroundColor: kSurface1,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: kBorder)),
+        title: const Text("Payment Details", style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Total Amount: ₹${_totalCost.toStringAsFixed(0)}", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-            SizedBox(height: 12),
-            Text("Owner UPI ID:", style: TextStyle(color: Colors.grey, fontSize: 12)),
-            SelectableText(upi, style: TextStyle(color: Colors.indigoAccent, fontSize: 16, fontWeight: FontWeight.bold)),
-            SizedBox(height: 16),
-            Text("Please send payment via GPay/PhonePe/Paytm to the UPI ID above.", style: TextStyle(color: Colors.white70, fontSize: 12)),
+            Text("Total Amount: ₹${_totalCost.toStringAsFixed(0)}", style: const TextStyle(color: kTextPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            const Text("Owner UPI ID:", style: TextStyle(color: kTextMuted, fontSize: 12)),
+            SelectableText(upi, style: const TextStyle(color: kAccentCyan, fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            const Text("Please send payment via GPay/PhonePe/Paytm to the UPI ID above.", style: TextStyle(color: kTextDim, fontSize: 12)),
           ],
         ),
         actions: [
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            style: ElevatedButton.styleFrom(backgroundColor: kTextPrimary, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
             onPressed: () async {
-              await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({
-                'status': 'completed',
-                'paymentConfirmed': true,
-              });
-              Navigator.pop(context);
+              await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({'status': 'completed'});
               setState(() => _bookingStatus = 'completed');
+              Navigator.pop(context);
               _showReviewDialog();
             },
-            child: Text("I Have Paid", style: TextStyle(color: Colors.white)),
+            child: const Text("I Have Paid", style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -271,8 +283,9 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: Color(0xFF1E1E1E),
-          title: Text("Rate Your Experience", style: TextStyle(color: Colors.white)),
+          backgroundColor: kSurface1,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: kBorder)),
+          title: const Text("Rate Your Experience", style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -285,29 +298,25 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                       color: Colors.amber,
                       size: 32,
                     ),
-                    onPressed: () {
-                      setDialogState(() => _selectedRating = index + 1);
-                    },
+                    onPressed: () => setDialogState(() => _selectedRating = index + 1),
                   );
                 }),
               ),
+              const SizedBox(height: 12),
               TextField(
                 controller: _reviewController,
-                style: TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: "Leave feedback for the item/owner...",
-                  hintStyle: TextStyle(color: Colors.grey),
-                ),
+                style: const TextStyle(color: kTextPrimary),
+                decoration: rentXInputDecoration("Review", hint: "Leave feedback for item/owner..."),
               )
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text("Skip", style: TextStyle(color: Colors.grey)),
+              child: const Text("Skip", style: TextStyle(color: kTextDim)),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.indigoAccent),
+              style: ElevatedButton.styleFrom(backgroundColor: kTextPrimary, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
               onPressed: () async {
                 await FirebaseFirestore.instance.collection('items').doc(widget.itemId).collection('reviews').add({
                   'userId': currentUser?.uid,
@@ -317,9 +326,9 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                   'createdAt': FieldValue.serverTimestamp(),
                 });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Thank you for your feedback!")));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Thank you for your feedback!"), backgroundColor: kSurface1));
               },
-              child: Text("Submit", style: TextStyle(color: Colors.white)),
+              child: const Text("Submit", style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -327,290 +336,299 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     );
   }
 
-  Widget _buildImage(String? imageUrl) {
-    if (imageUrl == null || imageUrl.isEmpty) {
-      return Container(height: 250, color: Colors.grey[900], child: Icon(Icons.inventory_2, size: 80, color: Colors.white24));
+  void _openFullScreenViewer(int initialIndex) {
+    final urls = _allImageUrls;
+    if (urls.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FullScreenImageViewer(imageUrls: urls, initialIndex: initialIndex),
+      ),
+    );
+  }
+
+  Widget _buildSingleImage(String url, int index) {
+    Widget img;
+    if (url.startsWith('http')) {
+      img = Image.network(url, height: 260, width: double.infinity, fit: BoxFit.cover);
+    } else {
+      try {
+        img = Image.memory(base64Decode(url), height: 260, width: double.infinity, fit: BoxFit.cover);
+      } catch (_) {
+        img = Container(height: 260, color: kSurface1, child: const Icon(Icons.broken_image, size: 80, color: kTextDim));
+      }
     }
-    if (imageUrl.startsWith('http')) {
-      return Image.network(imageUrl, height: 250, width: double.infinity, fit: BoxFit.cover);
+    return GestureDetector(
+      onTap: () => _openFullScreenViewer(index),
+      child: img,
+    );
+  }
+
+  Widget _buildImageGallery() {
+    final urls = _allImageUrls;
+    if (urls.isEmpty) {
+      return Container(
+        height: 240,
+        color: kSurface1,
+        child: const Center(child: Icon(Icons.inventory_2_outlined, size: 60, color: kTextDim)),
+      );
     }
-    try {
-      return Image.memory(base64Decode(imageUrl), height: 250, width: double.infinity, fit: BoxFit.cover);
-    } catch (_) {
-      return Container(height: 250, color: Colors.grey[900], child: Icon(Icons.broken_image, size: 80, color: Colors.white24));
+
+    if (urls.length == 1) {
+      return _buildSingleImage(urls.first, 0);
     }
+
+    return Stack(
+      alignment: Alignment.bottomCenter,
+      children: [
+        SizedBox(
+          height: 260,
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: urls.length,
+            onPageChanged: (i) => setState(() => _currentImageIndex = i),
+            itemBuilder: (context, index) => _buildSingleImage(urls[index], index),
+          ),
+        ),
+        // Carousel Indicators
+        Positioned(
+          bottom: 12,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: urls.asMap().entries.map((entry) {
+              return Container(
+                width: _currentImageIndex == entry.key ? 18 : 6,
+                height: 6,
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(3),
+                  color: _currentImageIndex == entry.key ? kTextPrimary : kTextPrimary.withValues(alpha: 0.4),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        // Slide Count Badge
+        Positioned(
+          top: 12,
+          right: 12,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.65),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              "${_currentImageIndex + 1}/${urls.length}",
+              style: const TextStyle(color: kTextPrimary, fontSize: 11, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    String itemName = widget.data['itemName'] ?? 'Item';
+    String itemName = widget.data['itemName'] ?? 'Item Details';
     String itemType = widget.data['itemType'] ?? 'General';
     String location = widget.data['location'] ?? 'Campus';
+    String ownerName = widget.data['ownerName'] ?? 'Student Owner';
+    String description = widget.data['description'] ?? 'No extra details provided.';
     int basePrice = widget.data['basePrice'] ?? 20;
     int hourlyPrice = widget.data['hourlyPrice'] ?? 7;
-    String description = widget.data['description'] ?? 'No description provided.';
-    String ownerName = widget.data['ownerName'] ?? 'Student';
-    String roomNumber = widget.data['roomNumber'] ?? 'N/A';
 
     return Scaffold(
-      backgroundColor: Color(0xFF121212),
-      appBar: AppBar(
-        title: Text(itemName),
-        backgroundColor: Color(0xFF1E1E1E),
-      ),
-      body: ListView(
-        children: [
-          _buildImage(widget.data['imageUrl']),
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(itemName, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
-                    ),
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(color: Colors.indigoAccent, borderRadius: BorderRadius.circular(16)),
-                      child: Text(itemType, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(Icons.location_on, color: Colors.indigoAccent, size: 18),
-                    SizedBox(width: 6),
-                    Text("Collect From: $location Bhavan (Room $roomNumber)", style: TextStyle(color: Colors.white70, fontSize: 14)),
-                  ],
-                ),
-                SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(Icons.person, color: Colors.indigoAccent, size: 18),
-                    SizedBox(width: 6),
-                    Text("Owner: $ownerName", style: TextStyle(color: Colors.white70, fontSize: 14)),
-                  ],
-                ),
-                Divider(color: Colors.white24, height: 32),
+      backgroundColor: kBgColor,
+      appBar: rentXAppBar(context, itemName, subtitle: "$itemType • $location Bhavan"),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Gallery
+            _buildImageGallery(),
 
-                // Rates & Description
-                Text("Pricing Structure", style: TextStyle(color: Colors.indigoAccent, fontSize: 16, fontWeight: FontWeight.bold)),
-                SizedBox(height: 6),
-                Text("• Base Rate: ₹$basePrice for first 2 hours", style: TextStyle(color: Colors.white, fontSize: 14)),
-                Text("• Hourly Rate: ₹$hourlyPrice / hour after 2 hours", style: TextStyle(color: Colors.white, fontSize: 14)),
-                SizedBox(height: 16),
-                Text("Description", style: TextStyle(color: Colors.indigoAccent, fontSize: 16, fontWeight: FontWeight.bold)),
-                SizedBox(height: 6),
-                Text(description, style: TextStyle(color: Colors.white70, fontSize: 14)),
-                Divider(color: Colors.white24, height: 32),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Title & Badge Header
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(itemName, style: const TextStyle(color: kTextPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            Text("Owner: $ownerName • $location Bhavan", style: const TextStyle(color: kTextMuted, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                      rentXBadge(itemType, color: kAccentCyan),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
 
-                // Time Slot Selector
-                if (_bookingStatus == 'none') ...[
-                  Text("Select Duration", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 12),
+                  // Pricing Cards
                   Row(
                     children: [
                       Expanded(
-                        child: OutlinedButton.icon(
-                          icon: Icon(Icons.access_time, color: Colors.indigoAccent),
-                          label: Text("Start: ${DateFormat('h:mm a').format(_startTime)}", style: TextStyle(color: Colors.white)),
-                          onPressed: _selectStartTime,
+                        child: rentXCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text("BASE PRICE", style: TextStyle(color: kTextDim, fontSize: 10, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 4),
+                              Text("₹$basePrice", style: const TextStyle(color: kTextPrimary, fontSize: 20, fontWeight: FontWeight.bold)),
+                              const Text("For first 2 hours", style: TextStyle(color: kTextMuted, fontSize: 11)),
+                            ],
+                          ),
                         ),
                       ),
-                      SizedBox(width: 12),
+                      const SizedBox(width: 12),
                       Expanded(
-                        child: OutlinedButton.icon(
-                          icon: Icon(Icons.access_time_filled, color: Colors.indigoAccent),
-                          label: Text("End: ${DateFormat('h:mm a').format(_endTime)}", style: TextStyle(color: Colors.white)),
-                          onPressed: _selectEndTime,
+                        child: rentXCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text("HOURLY RATE", style: TextStyle(color: kTextDim, fontSize: 10, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 4),
+                              Text("₹$hourlyPrice/hr", style: const TextStyle(color: kTextPrimary, fontSize: 20, fontWeight: FontWeight.bold)),
+                              const Text("After 2 hours", style: TextStyle(color: kTextMuted, fontSize: 11)),
+                            ],
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  SizedBox(height: 16),
-                  Container(
-                    padding: EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(16)),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text("Estimated Total", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                            Text("${_durationInHours.toStringAsFixed(1)} hours rental", style: TextStyle(color: Colors.white70, fontSize: 12)),
-                          ],
-                        ),
-                        Text("₹${_totalCost.toStringAsFixed(0)}", style: TextStyle(color: Colors.indigoAccent, fontSize: 24, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
+                  const SizedBox(height: 20),
+
+                  // Description
+                  rentXSectionLabel("DESCRIPTION & NOTES"),
+                  rentXCard(
+                    padding: const EdgeInsets.all(14),
+                    child: Text(description, style: const TextStyle(color: kTextMuted, fontSize: 13, height: 1.5)),
                   ),
-                  SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _createBooking,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.indigoAccent,
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  const SizedBox(height: 24),
+
+                  // Active Booking Banner / Time Picker / Actions
+                  if (_bookingStatus == 'booked') ...[
+                    rentXCard(
+                      borderColor: kAccentCyan,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(children: [
+                            Icon(Icons.bookmark_added_outlined, color: kAccentCyan),
+                            SizedBox(width: 8),
+                            Text("BOOKING CONFIRMED", style: TextStyle(color: kAccentCyan, fontWeight: FontWeight.bold)),
+                          ]),
+                          const SizedBox(height: 8),
+                          if (_scheduledStartTime != null)
+                            Text("Slot: ${DateFormat('h:mm a').format(_scheduledStartTime!)} - ${DateFormat('h:mm a').format(_scheduledEndTime!)}",
+                              style: const TextStyle(color: kTextPrimary, fontSize: 13)),
+                          const SizedBox(height: 14),
+                          Row(children: [
+                            Expanded(child: OutlinedButton(
+                              onPressed: _contactOwnerOnWhatsApp,
+                              style: OutlinedButton.styleFrom(foregroundColor: kAccentGreen, side: const BorderSide(color: kAccentGreen)),
+                              child: const Text("WhatsApp"),
+                            )),
+                            const SizedBox(width: 10),
+                            Expanded(child: ElevatedButton(
+                              onPressed: _startSession,
+                              style: ElevatedButton.styleFrom(backgroundColor: kAccentCyan, foregroundColor: Colors.black),
+                              child: const Text("Start Session", style: TextStyle(fontWeight: FontWeight.bold)),
+                            )),
+                          ]),
+                        ],
                       ),
-                      child: Text("RESERVE ITEM NOW", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
-                  ),
-                ],
-
-                // Active Booking Management
-                if (_bookingStatus == 'booked') ...[
-                  Container(
-                    padding: EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Colors.amber.withOpacity(0.15), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.amber)),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.check_circle, color: Colors.amber),
+                  ] else if (_bookingStatus == 'started') ...[
+                    rentXCard(
+                      borderColor: kAccentGreen,
+                      child: Column(
+                        children: [
+                          const Row(children: [
+                            Icon(Icons.play_circle_fill, color: kAccentGreen),
                             SizedBox(width: 8),
-                            Text("Item Reserved!", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                          ],
-                        ),
-                        SizedBox(height: 8),
-                        Text("Contact the owner on WhatsApp to pick up the item at ${location} Bhavan.", style: TextStyle(color: Colors.white70, fontSize: 13)),
-                        SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                icon: Icon(Icons.chat, color: Colors.white),
-                                label: Text("WhatsApp Owner"),
-                                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                                onPressed: _openWhatsApp,
-                              ),
-                            ),
-                            SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                icon: Icon(Icons.play_arrow, color: Colors.white),
-                                label: Text("Start Session"),
-                                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigoAccent),
-                                onPressed: _startSession,
-                              ),
-                            ),
-                          ],
-                        )
-                      ],
+                            Text("RENTAL IN PROGRESS", style: TextStyle(color: kAccentGreen, fontWeight: FontWeight.bold)),
+                          ]),
+                          const SizedBox(height: 14),
+                          rentXButton(label: "END SESSION & PAY", onTap: _endSession, color: kAccentGreen),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-
-                if (_bookingStatus == 'started') ...[
-                  Container(
-                    padding: EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Colors.blue.withOpacity(0.15), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.blue)),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.timer, color: Colors.blue),
-                            SizedBox(width: 8),
-                            Text("Rental In Progress", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                          ],
-                        ),
-                        SizedBox(height: 8),
-                        Text("Return item to owner when finished and tap 'End Rental Session'.", style: TextStyle(color: Colors.white70, fontSize: 13)),
-                        SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            icon: Icon(Icons.stop, color: Colors.white),
-                            label: Text("END RENTAL SESSION"),
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, padding: EdgeInsets.symmetric(vertical: 14)),
-                            onPressed: _endSession,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-
-                if (_bookingStatus == 'payment_pending') ...[
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _showPaymentDialog,
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, padding: EdgeInsets.symmetric(vertical: 16)),
-                      child: Text("VIEW PAYMENT INFO", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    ),
-                  )
-                ],
-
-                Divider(color: Colors.white24, height: 40),
-
-                // Reviews Section
-                Text("Reviews & Ratings", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                SizedBox(height: 12),
-                StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('items')
-                      .doc(widget.itemId)
-                      .collection('reviews')
-                      .orderBy('createdAt', descending: true)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) return CircularProgressIndicator(color: Colors.indigoAccent);
-                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                      return Text("No reviews yet for this item.", style: TextStyle(color: Colors.grey));
-                    }
-                    var reviews = snapshot.data!.docs;
-                    return ListView.builder(
-                      shrinkWrap: true,
-                      physics: NeverScrollableScrollPhysics(),
-                      itemCount: reviews.length,
-                      itemBuilder: (context, index) {
-                        var rev = reviews[index].data() as Map<String, dynamic>;
-                        return Container(
-                          margin: EdgeInsets.only(bottom: 10),
-                          padding: EdgeInsets.all(12),
-                          decoration: BoxDecoration(color: Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(12)),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                  ] else ...[
+                    rentXSectionLabel("SELECT RENTAL DURATION"),
+                    rentXCard(
+                      child: Column(
+                        children: [
+                          Row(
                             children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(rev['userName'] ?? 'Anonymous', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                  Row(
-                                    children: List.generate(5, (i) {
-                                      return Icon(
-                                        i < (rev['rating'] ?? 5) ? Icons.star : Icons.star_border,
-                                        color: Colors.amber,
-                                        size: 16,
-                                      );
-                                    }),
-                                  )
-                                ],
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () => _selectTime(true),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text("START TIME", style: TextStyle(color: kTextDim, fontSize: 10, fontWeight: FontWeight.bold)),
+                                      const SizedBox(height: 4),
+                                      Text(DateFormat('h:mm a').format(_startTime), style: const TextStyle(color: kTextPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                ),
                               ),
-                              if ((rev['comment'] ?? '').isNotEmpty) ...[
-                                SizedBox(height: 4),
-                                Text(rev['comment'], style: TextStyle(color: Colors.white70, fontSize: 13)),
-                              ]
+                              Container(height: 30, width: 1, color: kBorder),
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.only(left: 16),
+                                  child: InkWell(
+                                    onTap: () => _selectTime(false),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text("END TIME", style: TextStyle(color: kTextDim, fontSize: 10, fontWeight: FontWeight.bold)),
+                                        const SizedBox(height: 4),
+                                        Text(DateFormat('h:mm a').format(_endTime), style: const TextStyle(color: kTextPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ],
+                          rentXDivider(),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text("Duration: ${_durationInHours.toStringAsFixed(1)} hrs", style: const TextStyle(color: kTextMuted, fontSize: 13)),
+                                Text("Total: ₹${_totalCost.toStringAsFixed(0)}", style: const TextStyle(color: kTextPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    rentXButton(
+                      label: "BOOK THIS ITEM NOW",
+                      onTap: _bookItem,
+                      icon: Icons.check_circle_outline,
+                    ),
+                  ],
+                  const SizedBox(height: 40),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

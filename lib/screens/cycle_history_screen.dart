@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import '../theme/app_theme.dart';
 
 class CycleHistoryScreen extends StatelessWidget {
   final String cycleId;
   final Map<String, dynamic> cycleData;
 
-  CycleHistoryScreen({required this.cycleId, required this.cycleData});
+  const CycleHistoryScreen({super.key, required this.cycleId, required this.cycleData});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(cycleData['modelName'] ?? "Cycle History"),
+      backgroundColor: kBgColor,
+      appBar: rentXAppBar(
+        context,
+        cycleData['modelName'] ?? 'Cycle History',
+        subtitle: 'Booking history for this cycle',
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
@@ -22,126 +26,85 @@ class CycleHistoryScreen extends StatelessWidget {
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator(color: kTextPrimary, strokeWidth: 2));
           }
           if (snapshot.hasError) {
-            return Center(child: Text("Error: ${snapshot.error}", style: TextStyle(color: Colors.red)));
+            return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: kAccentRed)));
           }
-
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.history, size: 60, color: Colors.grey),
-                  SizedBox(height: 10),
-                  Text("No bookings yet.", style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-            );
+            return rentXEmptyState(icon: Icons.history, message: "No bookings yet", subMessage: "Booking history will appear here.");
           }
 
-          var docs = snapshot.data!.docs;
-
+          final docs = snapshot.data!.docs;
           return ListView.builder(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             itemCount: docs.length,
             itemBuilder: (context, index) {
-              var booking = docs[index].data() as Map<String, dynamic>;
-              String userId = booking['userId'];
-              String status = booking['status'] ?? 'unknown';
-              bool isOngoing = ['booked', 'started', 'payment_pending', 'end_requested'].contains(status);
-              
-              Timestamp? startTime = booking['startTime'];
-              Timestamp? endTime = booking['endTime'];
-              double cost = (booking['finalCost'] ?? 0).toDouble();
+              final booking = docs[index].data() as Map<String, dynamic>;
+              final String userId = booking['userId'];
+              final String status = booking['status'] ?? 'unknown';
+              final bool isOngoing = ['booked', 'started', 'payment_pending', 'end_requested'].contains(status);
+              final Timestamp? startTime = booking['startTime'];
+              final Timestamp? endTime = booking['endTime'];
+              final double cost = (booking['finalCost'] ?? 0).toDouble();
+              final bool isNoShow = booking['isNoShow'] ?? false;
 
-              // NO-SHOW Handling
-              bool isNoShow = booking['isNoShow'] ?? false;
-              String statusLabel = isOngoing ? "ONGOING RIDE" : "COMPLETED";
-              Color labelColor = isOngoing ? Colors.blue : Colors.green;
-              
-              if (isNoShow) {
-                 statusLabel = "NO SHOW";
-                 labelColor = Colors.redAccent;
-              }
+              String statusLabel = isOngoing ? "ONGOING" : "COMPLETED";
+              Color labelColor = isOngoing ? kAccentCyan : kAccentGreen;
+              if (isNoShow) { statusLabel = "NO SHOW"; labelColor = kAccentRed; }
 
-              return Card(
-                color: isOngoing ? Colors.blue.withOpacity(0.1) : Color(0xFF1E1E1E),
-                margin: EdgeInsets.only(bottom: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: isOngoing ? BorderSide(color: Colors.blue, width: 2) : BorderSide.none,
+              return Container(
+                margin: const EdgeInsets.only(bottom: 14),
+                decoration: BoxDecoration(
+                  color: isOngoing ? kAccentCyan.withValues(alpha: 0.06) : kSurface1,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: isOngoing ? kAccentCyan.withValues(alpha: 0.4) : kBorder),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.all(12.0),
+                  padding: const EdgeInsets.all(14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // HEADER: STATUS
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Container(
-                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: labelColor,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              statusLabel,
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                          ),
+                          rentXBadge(statusLabel, color: labelColor),
                           if (!isOngoing)
-                            Text(
-                              "₹${cost.toStringAsFixed(0)}",
-                              style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16),
-                            ),
+                            Text("₹${cost.toStringAsFixed(0)}", style: const TextStyle(color: kAccentGreen, fontWeight: FontWeight.bold, fontSize: 16)),
                         ],
                       ),
-                      Divider(color: Colors.white12),
-
-                      // RENTER DETAILS (Fetch from Users collection)
+                      rentXDivider(),
+                      const SizedBox(height: 8),
                       FutureBuilder<DocumentSnapshot>(
                         future: FirebaseFirestore.instance.collection('users').doc(userId).get(),
                         builder: (context, userSnapshot) {
                           if (userSnapshot.connectionState == ConnectionState.waiting) {
-                            return Text("Loading Renter...", style: TextStyle(color: Colors.grey, fontSize: 12));
+                            return const Text("Loading...", style: TextStyle(color: kTextDim, fontSize: 12));
                           }
-                          
                           String renterName = "Unknown User";
                           String renterPhone = "N/A";
                           String renterId = "N/A";
-
                           if (userSnapshot.hasData && userSnapshot.data!.exists) {
-                            var userData = userSnapshot.data!.data() as Map<String, dynamic>;
+                            final userData = userSnapshot.data!.data() as Map<String, dynamic>;
                             renterName = userData['displayName'] ?? "Unknown User";
                             renterPhone = userData['phoneNumber'] ?? "N/A";
                             renterId = userData['studentId'] ?? "N/A";
                           }
-
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildInfoRow(Icons.person, renterName),
-                              _buildInfoRow(Icons.badge, "ID: $renterId"),
-                              _buildInfoRow(Icons.phone, renterPhone),
-                            ],
-                          );
+                          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            _infoRow(Icons.person_outline, renterName),
+                            _infoRow(Icons.badge_outlined, "ID: $renterId"),
+                            _infoRow(Icons.phone_outlined, renterPhone),
+                          ]);
                         },
                       ),
-                      
-                      SizedBox(height: 8),
-                      // TIME DETAILS
+                      const SizedBox(height: 8),
                       if (startTime != null)
-                        _buildInfoRow(Icons.access_time, "Start: ${DateFormat('MMM d, h:mm a').format(startTime.toDate())}"),
+                        _infoRow(Icons.access_time_rounded, "Start: ${DateFormat('MMM d, h:mm a').format(startTime.toDate())}"),
                       if (endTime != null)
-                        _buildInfoRow(Icons.flag, "End:   ${DateFormat('MMM d, h:mm a').format(endTime.toDate())}"),
-                      
-                      if(isOngoing && startTime != null) ...[
-                         SizedBox(height: 4),
-                         Text("Ride is still ongoing...", style: TextStyle(color: Colors.blueAccent, fontStyle: FontStyle.italic, fontSize: 12)),
+                        _infoRow(Icons.flag_outlined, "End:   ${DateFormat('MMM d, h:mm a').format(endTime.toDate())}"),
+                      if (isOngoing && startTime != null) ...[
+                        const SizedBox(height: 4),
+                        Text("Ride is still ongoing...", style: TextStyle(color: kAccentCyan.withValues(alpha: 0.8), fontStyle: FontStyle.italic, fontSize: 12)),
                       ]
                     ],
                   ),
@@ -154,16 +117,14 @@ class CycleHistoryScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String text) {
+  Widget _infoRow(IconData icon, String text) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2.0),
-      child: Row(
-        children: [
-          Icon(icon, size: 14, color: Colors.grey),
-          SizedBox(width: 8),
-          Text(text, style: TextStyle(color: Colors.white70, fontSize: 14)),
-        ],
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(children: [
+        Icon(icon, size: 14, color: kTextDim),
+        const SizedBox(width: 8),
+        Text(text, style: const TextStyle(color: kTextMuted, fontSize: 13)),
+      ]),
     );
   }
 }

@@ -323,14 +323,15 @@ class _BuyHomeScreenState extends State<BuyHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: const Color(0xFF000000),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF121212),
+        backgroundColor: const Color(0xFF000000),
+        elevation: 0,
         automaticallyImplyLeading: false,
         leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => LandingScreen()))),
         title: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text("Buy Anything", style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)),
-          Text("Items for sale by students", style: TextStyle(fontSize: 11, color: Colors.grey)),
+          Text("RentX • Buy Anything", style: TextStyle(fontSize: 19, color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: -0.3)),
+          Text("Campus buy & sell marketplace", style: TextStyle(fontSize: 11, color: Color(0xFFA1A1AA))),
         ]),
         actions: [
           IconButton(

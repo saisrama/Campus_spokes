@@ -12,7 +12,8 @@ import 'add_cycle_screen.dart';
 import '../services/notification_service.dart';
 import 'cycle_detail_screen.dart';
 import 'profile_screen.dart';
-import 'profile_setup_screen.dart'; // Added import
+import 'profile_setup_screen.dart';
+import '../theme/app_theme.dart'; // Added import
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -100,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               content: Text(
-                "A new version of Campus Spokes is available. Please update to continue using the app.",
+                "A new version of RentX is available. Please update to continue using the app.",
                 style: TextStyle(color: Colors.white70),
               ),
               actions: [
@@ -228,18 +229,20 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // APP BAR
+      backgroundColor: const Color(0xFF000000),
       appBar: AppBar(
+        backgroundColor: const Color(0xFF000000),
+        elevation: 0,
         automaticallyImplyLeading: false,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => LandingScreen())),
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Hey, ${user?.displayName?.split(' ')[0] ?? 'Student'}!", style: TextStyle(fontSize: 24)),
-            Text("Find your ride", style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.normal)),
+            Text("RentX Cycles", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+            Text("Hey ${user?.displayName?.split(' ')[0] ?? 'Student'}, find your ride", style: const TextStyle(fontSize: 11, color: Color(0xFFA1A1AA))),
           ],
         ),
         actions: [
@@ -247,9 +250,13 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.only(right: 16.0),
             child: GestureDetector(
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileScreen())),
-              child: CircleAvatar(
-                backgroundImage: NetworkImage(user?.photoURL ?? "https://via.placeholder.com/150"),
-                backgroundColor: Colors.grey,
+              child: Container(
+                decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: const Color(0xFF27272A))),
+                child: CircleAvatar(
+                  backgroundImage: NetworkImage(user?.photoURL ?? "https://via.placeholder.com/150"),
+                  backgroundColor: const Color(0xFF18181B),
+                  radius: 18,
+                ),
               ),
             ),
           )
@@ -322,10 +329,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     delegate: _StickyHeaderDelegate(
                       child: Container(
                         height: 60,
-                        padding: EdgeInsets.symmetric(vertical: 10),
+                        color: kBgColor,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
                         child: ListView.builder(
                           scrollDirection: Axis.horizontal,
-                          padding: EdgeInsets.symmetric(horizontal: 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
                           itemCount: _locations.length,
                           itemBuilder: (context, index) {
                             String loc = _locations[index];
@@ -333,17 +341,22 @@ class _HomeScreenState extends State<HomeScreen> {
                             return GestureDetector(
                               onTap: () => setState(() => _selectedLocation = loc),
                               child: Container(
-                                margin: EdgeInsets.only(right: 10),
-                                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                margin: const EdgeInsets.only(right: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                 decoration: BoxDecoration(
-                                  color: isSelected ? Colors.white : Color(0xFF2C2C2C),
+                                  color: isSelected ? kTextPrimary : kSurface1,
                                   borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: isSelected ? kTextPrimary : kBorder),
                                 ),
                                 child: Center(
-                                  child: Text(loc, style: TextStyle(
-                                    color: isSelected ? Colors.black : Colors.white, 
-                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal
-                                  )),
+                                  child: Text(
+                                    loc,
+                                    style: TextStyle(
+                                      color: isSelected ? Colors.black : kTextMuted,
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                      fontSize: 13,
+                                    ),
+                                  ),
                                 ),
                               ),
                             );

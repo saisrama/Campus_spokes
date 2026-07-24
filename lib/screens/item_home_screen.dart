@@ -672,19 +672,20 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: const Color(0xFF000000),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF121212),
+        backgroundColor: const Color(0xFF000000),
+        elevation: 0,
         automaticallyImplyLeading: false,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => LandingScreen())),
         ),
-        title: Column(
+        title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            Text("Rent Anything", style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)),
-            Text("Items listed by students", style: TextStyle(fontSize: 11, color: Colors.grey)),
+          children: [
+            Text("RentX • Rent Anything", style: TextStyle(fontSize: 19, color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: -0.3)),
+            Text("Campus peer-to-peer rental hub", style: TextStyle(fontSize: 11, color: Color(0xFFA1A1AA))),
           ],
         ),
         actions: [

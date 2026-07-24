@@ -94,31 +94,132 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset('assets/images/logo.png', height: 120),
-            SizedBox(height: 20),
-            Text("CAMPUS SPOKES", style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold)),
-            SizedBox(height: 10),
-            Text("Ride. Share. Explore.", style: TextStyle(color: Colors.grey)),
-            SizedBox(height: 50),
-            
-            _isLoading 
-              ? CircularProgressIndicator(color: Colors.white)
-              : ElevatedButton.icon(
-                  onPressed: _handleSignIn,
-                  icon: Image.network('https://cdn-icons-png.flaticon.com/512/300/300221.png', height: 24), // Reliable Google Icon
-                  label: Text("Login with Google", style: TextStyle(color: Colors.black, fontSize: 16)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                  ),
+      backgroundColor: const Color(0xFF000000),
+      body: Stack(
+        children: [
+          // Background subtle ambient radial glow
+          Positioned(
+            top: -100,
+            left: MediaQuery.of(context).size.width / 2 - 150,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    Colors.white.withValues(alpha: 0.08),
+                    Colors.transparent,
+                  ],
                 ),
-          ],
-        ),
+              ),
+            ),
+          ),
+          Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 28),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Logo container with Vercel-style subtle border
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF09090B),
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(color: const Color(0xFF27272A)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.8),
+                          blurRadius: 30,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Image.asset(
+                      'assets/images/RentX_logo.png',
+                      height: 100,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.bolt,
+                        size: 80,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // App Title
+                  const Text(
+                    "RentX",
+                    style: TextStyle(
+                      fontSize: 42,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFFFAFAFA),
+                      letterSpacing: -1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // New Slogan & Subtitle
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF18181B),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFF27272A)),
+                    ),
+                    child: const Text(
+                      "Rent Anything • Buy Anything • Ride Anywhere",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color(0xFFA1A1AA),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  const Text(
+                    "BITS Pilani Hyderabad Campus Marketplace",
+                    style: TextStyle(color: Color(0xFF71717A), fontSize: 12),
+                  ),
+
+                  const SizedBox(height: 48),
+
+                  _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                      : ElevatedButton.icon(
+                          onPressed: _handleSignIn,
+                          icon: Image.network(
+                            'https://cdn-icons-png.flaticon.com/512/300/300221.png',
+                            height: 22,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.login, color: Colors.black, size: 20),
+                          ),
+                          label: const Text(
+                            "Continue with BITS Google ID",
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFAFAFA),
+                            foregroundColor: Colors.black,
+                            minimumSize: const Size(double.infinity, 54),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            elevation: 0,
+                          ),
+                        ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

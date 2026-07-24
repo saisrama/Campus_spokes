@@ -2,19 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import '../theme/app_theme.dart';
 import 'ride_details_screen.dart';
 
 class ReceivedBookingsScreen extends StatelessWidget {
+  const ReceivedBookingsScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      backgroundColor: Color(0xFF121212),
-      appBar: AppBar(
-        backgroundColor: Color(0xFF1E1E1E),
-        title: Text("Received Bookings"),
-      ),
+      backgroundColor: kBgColor,
+      appBar: rentXAppBar(context, "Received Bookings", subtitle: "Bookings on your listed items & cycles"),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('bookings')
@@ -23,26 +23,25 @@ class ReceivedBookingsScreen extends StatelessWidget {
             .orderBy('createdAt', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: Colors.indigoAccent));
-          if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: TextStyle(color: Colors.white)));
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator(color: kTextPrimary, strokeWidth: 2));
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: kAccentRed)));
+          }
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.bookmark_border, size: 60, color: Colors.grey),
-                  SizedBox(height: 10),
-                  Text("No upcoming or current bookings.", style: TextStyle(color: Colors.grey)),
-                ],
-              ),
+            return rentXEmptyState(
+              icon: Icons.inbox_outlined,
+              message: "No received bookings",
+              subMessage: "When students book your listed items or cycles, requests will appear here.",
             );
           }
 
           var docs = snapshot.data!.docs;
 
           return ListView.builder(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             itemCount: docs.length,
             itemBuilder: (context, index) {
               var booking = docs[index].data() as Map<String, dynamic>;
@@ -62,50 +61,66 @@ class ReceivedBookingsScreen extends StatelessWidget {
                 future: FirebaseFirestore.instance.collection('users').doc(renterId).get(),
                 builder: (context, userSnapshot) {
                   String renterName = "Loading...";
-                  String renterPhone = "";
 
                   if (userSnapshot.connectionState == ConnectionState.done) {
                     if (userSnapshot.hasData && userSnapshot.data!.exists) {
                       var userData = userSnapshot.data!.data() as Map<String, dynamic>;
                       renterName = userData['displayName'] ?? "User";
-                      renterPhone = userData['phoneNumber'] ?? "";
                     } else {
                       renterName = booking['renterName'] ?? "Unknown User";
-                      renterPhone = booking['renterPhone'] ?? "";
                     }
                   }
 
-                  return Card(
-                    color: Color(0xFF1E1E1E),
-                    margin: EdgeInsets.only(bottom: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  Color statusColor = kTextMuted;
+                  if (status == 'booked' || status == 'started') statusColor = kAccentCyan;
+                  if (status == 'payment_pending') statusColor = kAccentOrange;
+                  if (status.contains('cancelled')) statusColor = kAccentRed;
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: kSurface1,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: kBorder),
+                    ),
                     child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       onTap: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => RideDetailsScreen(booking: booking, bookingId: bookingId)));
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => RideDetailsScreen(booking: booking, bookingId: bookingId),
+                          ),
+                        );
                       },
-                      leading: CircleAvatar(
-                        backgroundColor: _getStatusColor(status).withOpacity(0.1),
-                        child: Icon(_getStatusIcon(status, isItem: isItem), color: _getStatusColor(status)),
+                      leading: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                        ),
+                        child: Icon(isItem ? Icons.inventory_2_outlined : Icons.pedal_bike, color: statusColor, size: 22),
                       ),
-                      title: Text(listingName, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text("Renter: $renterName", style: TextStyle(color: Colors.white70)),
-                          if (renterPhone.isNotEmpty)
-                            Text("Phone: $renterPhone", style: TextStyle(color: Colors.white54, fontSize: 11)),
-                          SizedBox(height: 4),
-                          Text("Status: ${status.toUpperCase()}", style: TextStyle(color: _getStatusColor(status), fontSize: 12, fontWeight: FontWeight.bold)),
-                          if (status == 'cancelled')
+                      title: Text(
+                        listingName,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: kTextPrimary),
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("Renter: $renterName", style: const TextStyle(color: kTextMuted, fontSize: 12)),
+                            const SizedBox(height: 2),
                             Text(
-                              "Cancellation Fee: ₹${(booking['cancellationFee'] ?? booking['finalCost'] ?? 0).toString()}",
-                              style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+                              createdAt != null ? DateFormat('MMM dd • hh:mm a').format(createdAt) : "",
+                              style: const TextStyle(color: kTextDim, fontSize: 11),
                             ),
-                          if (createdAt != null)
-                            Text("Booked on: ${DateFormat('MMM dd, hh:mm a').format(createdAt)}", style: TextStyle(fontSize: 10, color: Colors.grey)),
-                        ],
+                          ],
+                        ),
                       ),
-                      trailing: Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+                      trailing: rentXBadge(status.toUpperCase(), color: statusColor),
                     ),
                   );
                 },
@@ -115,25 +130,5 @@ class ReceivedBookingsScreen extends StatelessWidget {
         },
       ),
     );
-  }
-
-  IconData _getStatusIcon(String status, {required bool isItem}) {
-    if (status == 'completed') return Icons.check_circle;
-    if (status == 'started') return isItem ? Icons.inventory_2 : Icons.pedal_bike;
-    if (status == 'booked') return Icons.bookmark;
-    if (status == 'payment_pending') return Icons.payment;
-    if (status == 'cancelled') return Icons.cancel;
-    if (status == 'owner_cancelled') return Icons.cancel_outlined;
-    return Icons.help;
-  }
-
-  Color _getStatusColor(String status) {
-    if (status == 'completed') return Colors.green;
-    if (status == 'started') return Colors.blue;
-    if (status == 'booked') return Colors.orange;
-    if (status == 'payment_pending') return Colors.amber;
-    if (status == 'cancelled') return Colors.red;
-    if (status == 'owner_cancelled') return Colors.deepOrange;
-    return Colors.grey;
   }
 }

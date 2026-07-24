@@ -1,11 +1,10 @@
 import 'dart:convert';
-import 'dart:io';
-import 'package:flutter/foundation.dart'; // For kIsWeb
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
-// import 'package:firebase_storage/firebase_storage.dart'; // Not needed for Base64
+import '../theme/app_theme.dart';
 
 class AddCycleScreen extends StatefulWidget {
   final Map<String, dynamic>? cycleData;
@@ -27,126 +26,97 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
   String description = '';
   String ownerPhone = '';
   String roomNumber = '';
-  String gearType = 'Single Geared'; 
+  String gearType = 'Single Geared';
   bool _isUploading = false;
-  bool _acceptedTerms = false; // T&C State
-  
-  final List<String> _gearOptions = ["Single Geared", "Geared"];
+  bool _acceptedTerms = false;
 
-  // Image Logic
-  XFile? _pickedFile;
-  final picker = ImagePicker();
-  // Using a more reliable placeholder service or empty string
-  // Using a more reliable placeholder service or empty string
-  String _uploadedImageUrl = "";  
+  final List<String> _gearOptions = ["Single Geared", "Geared"];
+  final List<String> _parkingLocations = [
+    "VK Back Gate", "Mess 2", "VM Cycle Parking", "Mess 1",
+    "Ganga/Meera Parking", "SAC/Malviya Parking"
+  ];
+
+  // Multi-image support
+  final List<XFile> _newImages = [];
+  List<String> _existingImageUrls = [];
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
     if (widget.cycleData != null) {
-      modelName = widget.cycleData!['modelName'];
-      location = widget.cycleData!['location'];
-      upiId = widget.cycleData!['ownerUpiId'];
-      basePrice = widget.cycleData!['basePrice'];
-      hourlyPrice = widget.cycleData!['hourlyPrice'];
-      description = widget.cycleData!['description'] ?? '';
-      ownerPhone = widget.cycleData!['ownerPhone'] ?? '';
-      roomNumber = widget.cycleData!['roomNumber'] ?? '';
-      gearType = widget.cycleData!['gearType'] ?? 'Single Geared';
-      _uploadedImageUrl = widget.cycleData!['imageUrl'] ?? _uploadedImageUrl;
-    }
-  } 
+      final d = widget.cycleData!;
+      modelName = d['modelName'] ?? '';
+      location = d['location'] ?? 'VK Back Gate';
+      upiId = d['ownerUpiId'] ?? '';
+      basePrice = d['basePrice'] ?? 20;
+      hourlyPrice = d['hourlyPrice'] ?? 7;
+      description = d['description'] ?? '';
+      ownerPhone = d['ownerPhone'] ?? '';
+      roomNumber = d['roomNumber'] ?? '';
+      gearType = d['gearType'] ?? 'Single Geared';
 
-  Future<void> _pickImage() async {
-    // COMPRESS IMAGE: Quality 20, Width 600 to keep string size low for Firestore
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.gallery, 
-      imageQuality: 20, 
-      maxWidth: 600
-    );
-    
-    if (pickedFile != null) {
-      setState(() {
-        _pickedFile = pickedFile;
-      });
+      if (d['imageUrls'] is List) {
+        _existingImageUrls = List<String>.from(d['imageUrls']);
+      } else if ((d['imageUrl'] ?? '').isNotEmpty) {
+        _existingImageUrls = [d['imageUrl']];
+      }
     }
   }
 
-  Future<String> _uploadImage() async {
-    if (_pickedFile == null) return _uploadedImageUrl;
-    
-    try {
-      // CONVERT TO BASE64
-      // readAsBytes works on both Web (bytes) and Mobile (file)
-      List<int> imageBytes = await _pickedFile!.readAsBytes();
-      String base64Image = base64Encode(imageBytes);
-      print("Base64 String Length: ${base64Image.length}");
-      return base64Image;
-    } catch (e) {
-      print("Encoding Error: $e");
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Image Encoding Failed: $e")));
-      return _uploadedImageUrl; // Fallback
+  Future<void> _pickImages() async {
+    final picked = await _picker.pickMultiImage(imageQuality: 25, maxWidth: 800);
+    if (picked.isNotEmpty) setState(() => _newImages.addAll(picked));
+  }
+
+  Future<List<String>> _encodeAllImages() async {
+    List<String> urls = List.from(_existingImageUrls);
+    for (final img in _newImages) {
+      try {
+        final bytes = await img.readAsBytes();
+        urls.add(base64Encode(bytes));
+      } catch (_) {}
     }
+    return urls;
   }
 
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
 
-    // VALIDATION: Check if image is provided
-    if (_pickedFile == null && (_uploadedImageUrl.isEmpty || !_uploadedImageUrl.startsWith('http') && _uploadedImageUrl.isEmpty)) {
+    if (_newImages.isEmpty && _existingImageUrls.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Please upload an image of your cycle."),
-          backgroundColor: Colors.red,
-        )
-      );
+        const SnackBar(content: Text("Please upload at least one photo of your cycle."), backgroundColor: Colors.redAccent));
       return;
     }
-
-    // VALIDATION: Terms & Conditions
     if (!_acceptedTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("You must accept the Terms and Conditions to list your cycle."),
-          backgroundColor: Colors.red,
-        )
-      );
+        const SnackBar(content: Text("You must accept the Terms & Conditions."), backgroundColor: Colors.redAccent));
       return;
     }
 
-    // SHOW CONFIRMATION DIALOG
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text("Confirm Details"),
-        content: SingleChildScrollView(
-          child: ListBody(
-            children: [
-              Text("Model: $modelName"),
-              Text("Location: $location"),
-              Text("Phone: $ownerPhone"),
-              Text("UPI: $upiId"),
-              SizedBox(height: 10),
-              Text("Base Price: ₹$basePrice"),
-              Text("Hourly Price: ₹$hourlyPrice"),
-              SizedBox(height: 10),
-              Text("Is everything correct?", style: TextStyle(fontWeight: FontWeight.bold)),
-            ],
-          ),
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kSurface1,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: kBorder)),
+        title: const Text("Confirm Details", style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Model: $modelName", style: const TextStyle(color: kTextMuted)),
+            Text("Gear: $gearType", style: const TextStyle(color: kTextMuted)),
+            Text("Parked at: $location", style: const TextStyle(color: kTextMuted)),
+            Text("Base: ₹$basePrice | Hourly: ₹$hourlyPrice", style: const TextStyle(color: kTextMuted)),
+          ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context), // Cancel
-            child: Text("Edit", style: TextStyle(color: Colors.grey)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Edit", style: TextStyle(color: kTextDim))),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context); // Close dialog
-              _uploadAndSave(); // Proceed to upload
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-            child: Text("Confirm & List", style: TextStyle(color: Colors.white)),
+            onPressed: () { Navigator.pop(ctx); _uploadAndSave(); },
+            style: ElevatedButton.styleFrom(backgroundColor: kTextPrimary, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            child: const Text("Confirm & List", style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -155,52 +125,40 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
 
   Future<void> _uploadAndSave() async {
     setState(() => _isUploading = true);
-
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      
-      // Upload Image First
-      String finalImageUrl = await _uploadImage();
-      
-      // Save to Firestore
+      final user = FirebaseAuth.instance.currentUser!;
+      final allImages = await _encodeAllImages();
+      final primaryUrl = allImages.isNotEmpty ? allImages.first : '';
+
+      final payload = {
+        'ownerName': user.displayName,
+        'ownerPhone': ownerPhone,
+        'roomNumber': roomNumber,
+        'ownerUpiId': upiId,
+        'modelName': modelName,
+        'location': location,
+        'basePrice': basePrice,
+        'hourlyPrice': hourlyPrice,
+        'description': description,
+        'gearType': gearType,
+        'imageUrl': primaryUrl,
+        'imageUrls': allImages,
+      };
+
       if (widget.cycleId != null) {
-         // UPDATE EXISTING
-         await FirebaseFirestore.instance.collection('cycles').doc(widget.cycleId).update({
-          'ownerName': user!.displayName,
-          'ownerPhone': ownerPhone,
-          'roomNumber': roomNumber,
-          'ownerUpiId': upiId,
-          'modelName': modelName,
-          'location': location,
-          'basePrice': basePrice,
-          'hourlyPrice': hourlyPrice,
-          'description': description,
-          'gearType': gearType,
-          'imageUrl': finalImageUrl, 
-         });
+        await FirebaseFirestore.instance.collection('cycles').doc(widget.cycleId).update(payload);
       } else {
-        // CREATE NEW
         await FirebaseFirestore.instance.collection('cycles').add({
-          'ownerId': user!.uid,
-          'ownerName': user.displayName,
-          'ownerPhone': ownerPhone,
-          'roomNumber': roomNumber,
-          'ownerUpiId': upiId,
-          'modelName': modelName,
-          'location': location,
-          'basePrice': basePrice,
-          'hourlyPrice': hourlyPrice,
-          'description': description,
-          'gearType': gearType,
-          'imageUrl': finalImageUrl,
+          ...payload,
+          'ownerId': user.uid,
           'isAvailable': true,
           'createdAt': FieldValue.serverTimestamp(),
         });
       }
 
-      Navigator.pop(context); // Success
+      if (mounted) Navigator.pop(context);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.redAccent));
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
@@ -209,23 +167,23 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
   void _showTermsDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text("Owner Terms & Conditions"),
-        content: SingleChildScrollView(
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kSurface1,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: kBorder)),
+        title: const Text("Owner Terms & Conditions", style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
+        content: const SingleChildScrollView(
           child: Text(
             "1. You confirm that you are the verified owner of this cycle.\n"
             "2. You agree to maintain the cycle in good working condition.\n"
-            "3. You create this listing at your own risk. Campus Spokes acts only as a connector.\n"
-            "4. You responsible for verifying the cycle condition after each ride.\n"
+            "3. You create this listing at your own risk. RentX acts only as a connector.\n"
+            "4. You are responsible for verifying the cycle condition after each ride.\n"
             "5. Any disputes regarding damage are to be resolved directly with the renter.\n"
-            "6. Incorrect or misleading information may lead to account suspension."
+            "6. Incorrect or misleading information may lead to account suspension.",
+            style: TextStyle(color: kTextMuted, height: 1.6),
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("Close"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Close", style: TextStyle(color: kTextPrimary))),
         ],
       ),
     );
@@ -234,196 +192,246 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.cycleId != null ? "Edit Cycle" : "List Your Cycle")),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // PHOTO UPLOAD AREA
-              GestureDetector(
-                onTap: _pickImage,
-                child: Container(
-                  height: 180,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[900],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey[700]!),
-                    image: _pickedFile != null 
-                      ? DecorationImage(
-                          image: kIsWeb 
-                            ? NetworkImage(_pickedFile!.path) // Web: Blob URL
-                            : FileImage(File(_pickedFile!.path)) as ImageProvider, // Mobile: File path
-                          fit: BoxFit.cover
-                        )
-                      : (_uploadedImageUrl.startsWith('http') 
-                          ? DecorationImage(image: NetworkImage(_uploadedImageUrl), fit: BoxFit.cover)
-                          : (_uploadedImageUrl.isNotEmpty 
-                              ? DecorationImage(image: MemoryImage(base64Decode(_uploadedImageUrl)), fit: BoxFit.cover)
-                              : null))
-                  ),
-                  child: _pickedFile == null && !_uploadedImageUrl.startsWith('http') && _uploadedImageUrl.isEmpty
-                    ? Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.camera_alt, size: 40, color: Colors.white),
-                          SizedBox(height: 10),
-                          Text("Tap to add photo", style: TextStyle(color: Colors.grey)),
-                        ],
-                      )
-                    : null,
-                ),
-              ),
-              SizedBox(height: 20),
-
-              // FIELDS
-              TextFormField(
-                initialValue: modelName,
-                decoration: InputDecoration(labelText: "Cycle Model (e.g. Hercules Roadeo)", border: OutlineInputBorder()),
-                validator: (v) => v!.isEmpty ? "Required" : null,
-                onSaved: (v) => modelName = v!,
-              ),
-              SizedBox(height: 15),
-
-              // GEAR TYPE DROPDOWN
-              DropdownButtonFormField<String>(
-                value: gearType,
-                decoration: InputDecoration(
-                  labelText: "Gear Type",
-                  prefixIcon: Icon(Icons.settings, color: Colors.blue),
-                  border: OutlineInputBorder(),
-                ),
-                items: _gearOptions.map((String val) {
-                  return DropdownMenuItem<String>(
-                    value: val,
-                    child: Text(val),
-                  );
-                }).toList(),
-                onChanged: (val) {
-                  setState(() {
-                    gearType = val!;
-                  });
-                },
-              ),
-              SizedBox(height: 15),
-
-              TextFormField(
-                initialValue: ownerPhone,
-                decoration: InputDecoration(
-                  labelText: "Your Phone Number", 
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.phone, color: Colors.blue),
-                ),
-                keyboardType: TextInputType.phone,
-                maxLength: 10,
-                validator: (v) => v!.length != 10 ? "Must be exactly 10 digits" : null,
-                onSaved: (v) => ownerPhone = v!,
-              ),
-              SizedBox(height: 15),
-
-              TextFormField(
-                initialValue: roomNumber,
-                decoration: InputDecoration(
-                  labelText: "Room Number (e.g. B-304)", 
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.meeting_room, color: Colors.orange),
-                ),
-                validator: (v) => v!.isEmpty ? "Required" : null,
-                onSaved: (v) => roomNumber = v!,
-              ),
-              SizedBox(height: 15),
-
-              TextFormField(
-                initialValue: upiId,
-                decoration: InputDecoration(
-                  labelText: "Your UPI ID (e.g. name@oksbi)", 
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.currency_rupee, color: Colors.green),
-                  helperText: "Money will be sent directly here."
-                ),
-                validator: (v) => !v!.contains('@') ? "Invalid UPI ID" : null,
-                onSaved: (v) => upiId = v!,
-              ),
-              SizedBox(height: 15),
-
-              Row(
+      backgroundColor: kBgColor,
+      appBar: rentXAppBar(context,
+        widget.cycleId != null ? "Edit Cycle" : "List Your Cycle",
+        subtitle: "RentX Campus Cycle Rentals",
+      ),
+      body: _isUploading
+          ? const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              CircularProgressIndicator(color: kTextPrimary, strokeWidth: 2),
+              SizedBox(height: 16),
+              Text("Saving your listing...", style: TextStyle(color: kTextMuted)),
+            ]))
+          : Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.all(20),
                 children: [
-                  Expanded(
-                    child: TextFormField(
-                      decoration: InputDecoration(labelText: "Base Price (2hrs)", border: OutlineInputBorder()),
-                      keyboardType: TextInputType.number,
+                  // ── PHOTOS ──
+                  rentXSectionLabel("CYCLE PHOTOS"),
+                  _buildImageGrid(),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _pickImages,
+                    icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
+                    label: const Text("Add Photos"),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: kTextMuted,
+                      side: const BorderSide(color: kBorder),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // ── CYCLE DETAILS ──
+                  rentXSectionLabel("CYCLE DETAILS"),
+                  TextFormField(
+                    initialValue: modelName,
+                    style: const TextStyle(color: kTextPrimary),
+                    decoration: rentXInputDecoration("Cycle Model", hint: "e.g., Hercules Roadeo, Firefox Gravity"),
+                    validator: (v) => v == null || v.trim().isEmpty ? "Enter model name" : null,
+                    onSaved: (v) => modelName = v!.trim(),
+                  ),
+                  const SizedBox(height: 12),
+
+                  DropdownButtonFormField<String>(
+                    value: _gearOptions.contains(gearType) ? gearType : _gearOptions.first,
+                    dropdownColor: kSurface2,
+                    style: const TextStyle(color: kTextPrimary),
+                    decoration: rentXInputDecoration("Gear Type"),
+                    items: _gearOptions.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                    onChanged: (v) { if (v != null) setState(() => gearType = v); },
+                  ),
+                  const SizedBox(height: 12),
+
+                  DropdownButtonFormField<String>(
+                    value: _parkingLocations.contains(location) ? location : _parkingLocations.first,
+                    dropdownColor: kSurface2,
+                    style: const TextStyle(color: kTextPrimary),
+                    decoration: rentXInputDecoration("Parked At"),
+                    items: _parkingLocations.map((l) => DropdownMenuItem(value: l, child: Text(l))).toList(),
+                    onChanged: (v) { if (v != null) setState(() => location = v); },
+                  ),
+                  const SizedBox(height: 12),
+
+                  Row(children: [
+                    Expanded(child: TextFormField(
+                      initialValue: ownerPhone,
+                      keyboardType: TextInputType.phone,
+                      maxLength: 10,
+                      style: const TextStyle(color: kTextPrimary),
+                      decoration: rentXInputDecoration("Phone No."),
+                      validator: (v) => (v ?? '').length != 10 ? "Must be 10 digits" : null,
+                      onSaved: (v) => ownerPhone = v!.trim(),
+                    )),
+                    const SizedBox(width: 12),
+                    Expanded(child: TextFormField(
+                      initialValue: roomNumber,
+                      style: const TextStyle(color: kTextPrimary),
+                      decoration: rentXInputDecoration("Room No.", hint: "e.g. B-304"),
+                      validator: (v) => v == null || v.trim().isEmpty ? "Required" : null,
+                      onSaved: (v) => roomNumber = v!.trim(),
+                    )),
+                  ]),
+                  const SizedBox(height: 12),
+
+                  TextFormField(
+                    initialValue: upiId,
+                    style: const TextStyle(color: kTextPrimary),
+                    decoration: rentXInputDecoration("UPI ID", hint: "name@oksbi"),
+                    validator: (v) => !(v ?? '').contains('@') ? "Invalid UPI ID" : null,
+                    onSaved: (v) => upiId = v!.trim(),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ── PRICING ──
+                  rentXSectionLabel("PRICING"),
+                  Row(children: [
+                    Expanded(child: TextFormField(
                       initialValue: basePrice.toString(),
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(color: kTextPrimary),
+                      decoration: rentXInputDecoration("Base Price (₹)", hint: "First 2 hrs"),
                       validator: (v) {
-                        int? p = int.tryParse(v!);
-                        if (p == null || p < 10 || p > 50) return "10-50 only";
+                        final p = int.tryParse(v ?? '');
+                        if (p == null || p < 10 || p > 50) return "₹10–50 only";
                         return null;
                       },
                       onSaved: (v) => basePrice = int.parse(v!),
-                    ),
-                  ),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: TextFormField(
-                      decoration: InputDecoration(labelText: "Hourly Rate", border: OutlineInputBorder()),
-                      keyboardType: TextInputType.number,
+                    )),
+                    const SizedBox(width: 12),
+                    Expanded(child: TextFormField(
                       initialValue: hourlyPrice.toString(),
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(color: kTextPrimary),
+                      decoration: rentXInputDecoration("Hourly Rate (₹)", hint: "After 2 hrs"),
                       validator: (v) {
-                        int? p = int.tryParse(v!);
-                        if (p == null || p < 7 || p > 20) return "7-20 only";
+                        final p = int.tryParse(v ?? '');
+                        if (p == null || p < 7 || p > 20) return "₹7–20 only";
                         return null;
                       },
                       onSaved: (v) => hourlyPrice = int.parse(v!),
+                    )),
+                  ]),
+                  const SizedBox(height: 12),
+
+                  TextFormField(
+                    initialValue: description,
+                    maxLines: 3,
+                    style: const TextStyle(color: kTextPrimary),
+                    decoration: rentXInputDecoration("Additional Notes", hint: "Describe the cycle's condition, accessories, etc."),
+                    onSaved: (v) => description = v?.trim() ?? '',
+                  ),
+                  const SizedBox(height: 24),
+
+                  // ── TERMS ──
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(color: kSurface1, borderRadius: BorderRadius.circular(12), border: Border.all(color: kBorder)),
+                    child: CheckboxListTile(
+                      value: _acceptedTerms,
+                      onChanged: (v) => setState(() => _acceptedTerms = v ?? false),
+                      title: const Text("I accept the Terms & Conditions", style: TextStyle(color: kTextMuted, fontSize: 13)),
+                      subtitle: GestureDetector(
+                        onTap: _showTermsDialog,
+                        child: const Text("Read Owner T&C", style: TextStyle(color: kAccentCyan, fontSize: 12, decoration: TextDecoration.underline, decorationColor: kAccentCyan)),
+                      ),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      activeColor: kTextPrimary,
+                      checkColor: Colors.black,
                     ),
                   ),
+                  const SizedBox(height: 20),
+
+                  rentXButton(
+                    label: widget.cycleId != null ? "UPDATE CYCLE" : "LIST MY CYCLE",
+                    onTap: _isUploading ? null : _submitForm,
+                    icon: Icons.pedal_bike,
+                  ),
+                  const SizedBox(height: 40),
                 ],
               ),
-              SizedBox(height: 15),
+            ),
+    );
+  }
 
-              DropdownButtonFormField<String>(
-                initialValue: location,
-                decoration: InputDecoration(labelText: "Parked At", border: OutlineInputBorder()),
-                items: ["VK Back Gate", "Mess 2", "VM Cycle Parking", "Mess 1", "Ganga/Meera Parking", "SAC/Malviya Parking"]
-                    .map((l) => DropdownMenuItem(value: l, child: Text(l))).toList(),
-                onChanged: (v) => setState(() => location = v!),
-              ),
+  Widget _buildImageGrid() {
+    final totalCount = _existingImageUrls.length + _newImages.length;
+    if (totalCount == 0) {
+      return GestureDetector(
+        onTap: _pickImages,
+        child: Container(
+          height: 160,
+          decoration: BoxDecoration(color: kSurface1, borderRadius: BorderRadius.circular(16), border: Border.all(color: kBorder)),
+          child: const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Icons.add_photo_alternate_outlined, size: 40, color: kTextDim),
+            SizedBox(height: 8),
+            Text("Tap to add photos", style: TextStyle(color: kTextDim, fontSize: 13)),
+            SizedBox(height: 4),
+            Text("Multiple photos supported", style: TextStyle(color: kTextDim, fontSize: 11)),
+          ])),
+        ),
+      );
+    }
 
-              SizedBox(height: 15),
+    return SizedBox(
+      height: 120,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          ..._existingImageUrls.asMap().entries.map((e) {
+            Widget img;
+            if (e.value.startsWith('http')) {
+              img = Image.network(e.value, fit: BoxFit.cover);
+            } else {
+              try { img = Image.memory(base64Decode(e.value), fit: BoxFit.cover); }
+              catch (_) { img = const Icon(Icons.broken_image, color: kTextDim); }
+            }
+            return _imageThumb(img, onRemove: () => setState(() => _existingImageUrls.removeAt(e.key)));
+          }),
+          ..._newImages.asMap().entries.map((e) => FutureBuilder<Uint8List>(
+            future: e.value.readAsBytes(),
+            builder: (_, snap) {
+              final img = snap.hasData ? Image.memory(snap.data!, fit: BoxFit.cover) : const Center(child: CircularProgressIndicator(strokeWidth: 1));
+              return _imageThumb(img, onRemove: () => setState(() => _newImages.removeAt(e.key)));
+            },
+          )),
+          GestureDetector(
+            onTap: _pickImages,
+            child: Container(
+              width: 110,
+              margin: const EdgeInsets.only(right: 10),
+              decoration: BoxDecoration(color: kSurface1, borderRadius: BorderRadius.circular(12), border: Border.all(color: kBorder)),
+              child: const Icon(Icons.add, color: kTextDim, size: 28),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-              // TERMS & CONDITIONS CHECKBOX
-              CheckboxListTile(
-                value: _acceptedTerms,
-                onChanged: (val) => setState(() => _acceptedTerms = val!),
-                title: Text("I accept the Terms and Conditions", style: TextStyle(fontSize: 14)),
-                subtitle: GestureDetector(
-                  onTap: _showTermsDialog,
-                  child: Text(
-                    "Read Owner T&C",
-                    style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline),
-                  ),
-                ),
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                activeColor: Colors.blue,
-              ),
-
-              SizedBox(height: 30),
-              
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _isUploading ? null : _submitForm,
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.white),
-                  child: _isUploading ? CircularProgressIndicator() : Text(widget.cycleId != null ? "UPDATE CYCLE" : "LIST MY CYCLE", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                ),
-              )
-            ],
+  Widget _imageThumb(Widget image, {required VoidCallback onRemove}) {
+    return Stack(children: [
+      Container(
+        width: 110,
+        margin: const EdgeInsets.only(right: 10),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: kBorder)),
+        clipBehavior: Clip.antiAlias,
+        child: image,
+      ),
+      Positioned(
+        top: 4, right: 14,
+        child: GestureDetector(
+          onTap: onRemove,
+          child: Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.7), shape: BoxShape.circle),
+            child: const Icon(Icons.close, color: Colors.white, size: 14),
           ),
         ),
       ),
-    );
+    ]);
   }
 }

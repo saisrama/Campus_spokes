@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../theme/app_theme.dart';
+import '../widgets/full_screen_image_viewer.dart';
 
 class BuyItemDetailScreen extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -18,6 +20,18 @@ class _BuyItemDetailScreenState extends State<BuyItemDetailScreen> {
   User? currentUser = FirebaseAuth.instance.currentUser;
   final TextEditingController _reviewController = TextEditingController();
   int _selectedRating = 5;
+  int _currentImageIndex = 0;
+  final PageController _pageController = PageController();
+
+  List<String> get _allImageUrls {
+    if (widget.data['imageUrls'] is List && (widget.data['imageUrls'] as List).isNotEmpty) {
+      return List<String>.from(widget.data['imageUrls']);
+    }
+    if ((widget.data['imageUrl'] ?? '').isNotEmpty) {
+      return [widget.data['imageUrl']];
+    }
+    return [];
+  }
 
   Future<void> _contactSeller() async {
     String phone = widget.data['ownerPhone'] ?? '';
@@ -31,7 +45,7 @@ class _BuyItemDetailScreenState extends State<BuyItemDetailScreen> {
     final itemName = widget.data['itemName'] ?? 'item';
     final price = widget.data['price'] ?? 0;
     final location = widget.data['location'] ?? 'campus';
-    final msg = "Hi ${widget.data['ownerName']}, I'm interested in buying your \"$itemName\" listed for ₹$price on Campus Spokes. Can we arrange collection at $location Bhavan?";
+    final msg = "Hi ${widget.data['ownerName']}, I'm interested in buying your \"$itemName\" listed for ₹$price on RentX. Can we arrange collection at $location Bhavan?";
 
     final Uri url = Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encodeComponent(msg)}");
     if (await canLaunchUrl(url)) {
@@ -46,8 +60,9 @@ class _BuyItemDetailScreenState extends State<BuyItemDetailScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
-          title: const Text("Rate This Seller", style: TextStyle(color: Colors.white)),
+          backgroundColor: kSurface1,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: kBorder)),
+          title: const Text("Rate This Seller", style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -60,17 +75,18 @@ class _BuyItemDetailScreenState extends State<BuyItemDetailScreen> {
                   );
                 }),
               ),
+              const SizedBox(height: 12),
               TextField(
                 controller: _reviewController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(hintText: "Share your experience...", hintStyle: TextStyle(color: Colors.grey)),
+                style: const TextStyle(color: kTextPrimary),
+                decoration: rentXInputDecoration("Review", hint: "Share your experience with seller..."),
               )
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Skip", style: TextStyle(color: Colors.grey))),
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Skip", style: TextStyle(color: kTextDim))),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent),
+              style: ElevatedButton.styleFrom(backgroundColor: kTextPrimary, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
               onPressed: () async {
                 await FirebaseFirestore.instance.collection('sale_items').doc(widget.itemId).collection('reviews').add({
                   'userId': currentUser?.uid,
@@ -80,9 +96,9 @@ class _BuyItemDetailScreenState extends State<BuyItemDetailScreen> {
                   'createdAt': FieldValue.serverTimestamp(),
                 });
                 if (mounted) Navigator.pop(context);
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Thank you for your review!")));
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Thank you for your review!"), backgroundColor: kSurface1));
               },
-              child: const Text("Submit", style: TextStyle(color: Colors.white)),
+              child: const Text("Submit", style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -90,175 +106,193 @@ class _BuyItemDetailScreenState extends State<BuyItemDetailScreen> {
     );
   }
 
-  Widget _buildImage(String? imageUrl) {
-    if (imageUrl == null || imageUrl.isEmpty) {
-      return Container(height: 280, color: Colors.grey[900], child: const Icon(Icons.inventory_2, size: 80, color: Colors.white24));
+  void _openFullScreenViewer(int initialIndex) {
+    final urls = _allImageUrls;
+    if (urls.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FullScreenImageViewer(imageUrls: urls, initialIndex: initialIndex),
+      ),
+    );
+  }
+
+  Widget _buildSingleImage(String url, int index) {
+    Widget img;
+    if (url.startsWith('http')) {
+      img = Image.network(url, height: 280, width: double.infinity, fit: BoxFit.cover);
+    } else {
+      try {
+        img = Image.memory(base64Decode(url), height: 280, width: double.infinity, fit: BoxFit.cover);
+      } catch (_) {
+        img = Container(height: 280, color: kSurface1, child: const Icon(Icons.broken_image, size: 80, color: kTextDim));
+      }
     }
-    if (imageUrl.startsWith('http')) return Image.network(imageUrl, height: 280, width: double.infinity, fit: BoxFit.cover);
-    try { return Image.memory(base64Decode(imageUrl), height: 280, width: double.infinity, fit: BoxFit.cover); } catch (_) {
-      return Container(height: 280, color: Colors.grey[900], child: const Icon(Icons.broken_image, size: 80, color: Colors.white24));
+    return GestureDetector(
+      onTap: () => _openFullScreenViewer(index),
+      child: img,
+    );
+  }
+
+  Widget _buildImageGallery() {
+    final urls = _allImageUrls;
+    if (urls.isEmpty) {
+      return Container(
+        height: 260,
+        color: kSurface1,
+        child: const Center(child: Icon(Icons.shopping_bag_outlined, size: 60, color: kTextDim)),
+      );
     }
+
+    if (urls.length == 1) {
+      return _buildSingleImage(urls.first, 0);
+    }
+
+    return Stack(
+      alignment: Alignment.bottomCenter,
+      children: [
+        SizedBox(
+          height: 280,
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: urls.length,
+            onPageChanged: (i) => setState(() => _currentImageIndex = i),
+            itemBuilder: (context, index) => _buildSingleImage(urls[index], index),
+          ),
+        ),
+        Positioned(
+          bottom: 12,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: urls.asMap().entries.map((entry) {
+              return Container(
+                width: _currentImageIndex == entry.key ? 18 : 6,
+                height: 6,
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(3),
+                  color: _currentImageIndex == entry.key ? kTextPrimary : kTextPrimary.withValues(alpha: 0.4),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        Positioned(
+          top: 12, right: 12,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.65), borderRadius: BorderRadius.circular(12)),
+            child: Text("${_currentImageIndex + 1}/${urls.length}", style: const TextStyle(color: kTextPrimary, fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isSold = widget.data['isSold'] == true;
-    final isOwner = currentUser?.uid == widget.data['ownerId'];
+    final itemName = widget.data['itemName'] ?? 'Item Details';
+    final price = widget.data['price'] ?? 0;
+    final itemType = widget.data['itemType'] ?? 'General';
+    final location = widget.data['location'] ?? 'Campus';
+    final ownerName = widget.data['ownerName'] ?? 'Seller';
+    final roomNumber = widget.data['roomNumber'] ?? 'N/A';
+    final description = widget.data['description'] ?? 'No description provided.';
+    final condition = widget.data['condition'] ?? 'Good';
+    final isOwner = currentUser != null && currentUser!.uid == widget.data['ownerId'];
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
-        title: Text(widget.data['itemName'] ?? 'Item'),
-        backgroundColor: const Color(0xFF1E1E1E),
-        actions: [
-          if (isOwner)
-            IconButton(
-              icon: Icon(isSold ? Icons.undo : Icons.check_circle, color: isSold ? Colors.grey : Colors.green),
-              tooltip: isSold ? "Mark as Available" : "Mark as Sold",
-              onPressed: () async {
-                await FirebaseFirestore.instance.collection('sale_items').doc(widget.itemId).update({'isSold': !isSold});
-                if (mounted) Navigator.pop(context);
-              },
-            ),
-        ],
-      ),
-      body: ListView(
-        children: [
-          Stack(
-            children: [
-              _buildImage(widget.data['imageUrl']),
-              if (isSold)
-                Positioned.fill(
-                  child: Container(
-                    color: Colors.black54,
-                    child: const Center(child: Text("SOLD", style: TextStyle(color: Colors.white, fontSize: 48, fontWeight: FontWeight.bold, letterSpacing: 8))),
+      backgroundColor: kBgColor,
+      appBar: rentXAppBar(context, itemName, subtitle: "Buy Section • $itemType"),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildImageGallery(),
+
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(itemName, style: const TextStyle(color: kTextPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            Text("Seller: $ownerName • Room $roomNumber, $location Bhavan", style: const TextStyle(color: kTextMuted, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text("₹$price", style: const TextStyle(color: kAccentOrange, fontSize: 24, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          rentXBadge(condition, color: kAccentOrange),
+                        ],
+                      ),
+                    ],
                   ),
-                ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(child: Text(widget.data['itemName'] ?? 'Item', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white))),
+                  const SizedBox(height: 20),
+
+                  rentXSectionLabel("DETAILS"),
+                  rentXCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on_outlined, color: kTextMuted, size: 16),
+                            const SizedBox(width: 6),
+                            Text("Collect from: $location Bhavan (Room $roomNumber)", style: const TextStyle(color: kTextPrimary, fontSize: 13)),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            const Icon(Icons.category_outlined, color: kTextMuted, size: 16),
+                            const SizedBox(width: 6),
+                            Text("Category: $itemType", style: const TextStyle(color: kTextPrimary, fontSize: 13)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  rentXSectionLabel("DESCRIPTION"),
+                  rentXCard(
+                    padding: const EdgeInsets.all(14),
+                    child: Text(description, style: const TextStyle(color: kTextMuted, fontSize: 13, height: 1.5)),
+                  ),
+                  const SizedBox(height: 24),
+
+                  if (isOwner) ...[
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(color: Colors.orangeAccent, borderRadius: BorderRadius.circular(16)),
-                      child: Text("₹${widget.data['price'] ?? 0}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(color: kSurface1, borderRadius: BorderRadius.circular(14), border: Border.all(color: kBorder)),
+                      child: const Center(child: Text("This is your sale listing", style: TextStyle(color: kTextMuted, fontSize: 13))),
+                    ),
+                  ] else ...[
+                    rentXButton(
+                      label: "BUY NOW — CONTACT SELLER",
+                      onTap: _contactSeller,
+                      color: kAccentGreen,
+                      icon: Icons.chat_bubble_outline,
                     ),
                   ],
-                ),
-                const SizedBox(height: 8),
-                Row(children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(12)),
-                    child: Text(widget.data['itemType'] ?? 'General', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.greenAccent.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.5))),
-                    child: Text(widget.data['condition'] ?? 'Good', style: const TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold)),
-                  ),
-                ]),
-                const SizedBox(height: 12),
-                Row(children: [
-                  const Icon(Icons.location_on, color: Colors.orangeAccent, size: 16),
-                  const SizedBox(width: 6),
-                  Text("Collect From: ${widget.data['location'] ?? 'Campus'} Bhavan (Room ${widget.data['roomNumber'] ?? 'N/A'})", style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                ]),
-                const SizedBox(height: 4),
-                Row(children: [
-                  const Icon(Icons.person, color: Colors.orangeAccent, size: 16),
-                  const SizedBox(width: 6),
-                  Text("Seller: ${widget.data['ownerName'] ?? 'Student'}", style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                ]),
-                const Divider(color: Colors.white24, height: 32),
-
-                if ((widget.data['description'] ?? '').isNotEmpty) ...[
-                  const Text("Description", style: TextStyle(color: Colors.orangeAccent, fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  Text(widget.data['description'], style: const TextStyle(color: Colors.white70, fontSize: 14)),
-                  const Divider(color: Colors.white24, height: 32),
+                  const SizedBox(height: 40),
                 ],
-
-                if (!isSold) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.chat, color: Colors.white),
-                      label: const Text("Contact Seller via WhatsApp", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF25D366),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                      onPressed: _contactSeller,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.star, color: Colors.orangeAccent),
-                      label: const Text("Rate This Seller", style: TextStyle(color: Colors.orangeAccent)),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: const BorderSide(color: Colors.orangeAccent),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                      onPressed: _showReviewDialog,
-                    ),
-                  ),
-                ] else
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.withValues(alpha: 0.3))),
-                    child: const Center(child: Text("This item has been sold.", style: TextStyle(color: Colors.grey, fontSize: 15))),
-                  ),
-
-                const SizedBox(height: 24),
-                const Text("Reviews", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
-                StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance.collection('sale_items').doc(widget.itemId).collection('reviews').orderBy('createdAt', descending: true).snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) return const CircularProgressIndicator(color: Colors.orangeAccent);
-                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Text("No reviews yet.", style: TextStyle(color: Colors.grey));
-                    return ListView.builder(
-                      shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-                      itemCount: snapshot.data!.docs.length,
-                      itemBuilder: (context, index) {
-                        var rev = snapshot.data!.docs[index].data() as Map<String, dynamic>;
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(12)),
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                              Text(rev['userName'] ?? 'Anonymous', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                              Row(children: List.generate(5, (i) => Icon(i < (rev['rating'] ?? 5) ? Icons.star : Icons.star_border, color: Colors.amber, size: 14))),
-                            ]),
-                            if ((rev['comment'] ?? '').isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(rev['comment'], style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                            ]
-                          ]),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

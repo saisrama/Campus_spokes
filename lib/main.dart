@@ -39,16 +39,17 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'College Cycle Share',
+      title: 'RentX — Campus Mobility & Marketplace',
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: Color(0xFF121212),
+        scaffoldBackgroundColor: const Color(0xFF000000),
         primaryColor: Colors.white,
-        cardColor: Color(0xFF1E1E1E),
-        // Applies Oswald font globally
-        textTheme: GoogleFonts.oswaldTextTheme(Theme.of(context).textTheme).apply(
-          bodyColor: Colors.white,
-          displayColor: Colors.white,
+        cardColor: const Color(0xFF09090B),
+        canvasColor: const Color(0xFF09090B),
+        dividerColor: const Color(0xFF27272A),
+        textTheme: GoogleFonts.plusJakartaSansTextTheme(Theme.of(context).textTheme).apply(
+          bodyColor: const Color(0xFFFAFAFA),
+          displayColor: const Color(0xFFFAFAFA),
         ),
       ),
       home: StreamBuilder<User?>(
@@ -56,13 +57,14 @@ class MyApp extends StatelessWidget {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Scaffold(
+              backgroundColor: const Color(0xFF000000),
               body: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Image.asset('assets/images/logo.png', height: 100),
-                    SizedBox(height: 20),
-                    CircularProgressIndicator(color: Colors.white),
+                    Image.asset('assets/images/RentX_logo.png', height: 100),
+                    const SizedBox(height: 24),
+                    const CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                   ],
                 ),
               ),

@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../theme/app_theme.dart';
 import 'home_screen.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
   final bool isEditing;
 
-  ProfileSetupScreen({this.isEditing = false});
+  const ProfileSetupScreen({super.key, this.isEditing = false});
 
   @override
   _ProfileSetupScreenState createState() => _ProfileSetupScreenState();
@@ -67,111 +68,92 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         'phoneNumber': _phoneController.text.trim(),
         'studentId': _studentIdController.text.trim(),
         'hostel': _selectedHostel,
-        'updatedAt': FieldValue.serverTimestamp(), // Track updates
+        'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
+      if (!mounted) return;
+
       if (widget.isEditing) {
-        Navigator.pop(context); // Return to Profile Screen
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Profile Updated!")));
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile Updated!"), backgroundColor: kSurface1));
       } else {
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomeScreen()));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error saving profile: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error saving profile: $e"), backgroundColor: Colors.redAccent));
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.isEditing ? "Edit Profile" : "Complete Your Profile")),
-      body: _isLoading && widget.isEditing // Show loader only if fetching initial data
-          ? Center(child: CircularProgressIndicator()) 
+      backgroundColor: kBgColor,
+      appBar: rentXAppBar(
+        context,
+        widget.isEditing ? "Edit Profile" : "Complete Profile",
+        subtitle: "RentX Account Information",
+      ),
+      body: _isLoading && widget.isEditing
+          ? const Center(child: CircularProgressIndicator(color: kTextPrimary, strokeWidth: 2))
           : SingleChildScrollView(
-              padding: EdgeInsets.all(20),
+              padding: const EdgeInsets.all(20),
               child: Form(
                 key: _formKey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(widget.isEditing ? "Update your details below." : "Please provide your details to continue.", style: TextStyle(color: Colors.grey)),
-                    SizedBox(height: 30),
-                    
-                    // PHONE NUMBER
+                    Text(
+                      widget.isEditing ? "Update your details below." : "Please provide your campus details to continue.",
+                      style: const TextStyle(color: kTextMuted, fontSize: 13),
+                    ),
+                    const SizedBox(height: 24),
+
+                    rentXSectionLabel("CONTACT & IDENTIFICATION"),
                     TextFormField(
                       controller: _phoneController,
-                      keyboardType: TextInputType.number, // Numeric Keypad
-                      maxLength: 10, // Limit to 10 chars
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly, // Only numbers
-                      ],
-                      style: TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: "Phone Number",
-                        prefixIcon: Icon(Icons.phone, color: Colors.white70),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        filled: true,
-                        fillColor: Color(0xFF1E1E1E),
-                        counterText: "", // Hide character counter
-                      ),
+                      keyboardType: TextInputType.number,
+                      maxLength: 10,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      style: const TextStyle(color: kTextPrimary),
+                      decoration: rentXInputDecoration("Phone Number", hint: "10-digit mobile number").copyWith(counterText: ""),
                       validator: (val) {
                         if (val == null || val.isEmpty) return "Enter phone number";
                         if (val.length != 10) return "Phone number must be 10 digits";
                         return null;
                       },
                     ),
-                    SizedBox(height: 20),
+                    const SizedBox(height: 16),
 
-                    // STUDENT ID
                     TextFormField(
                       controller: _studentIdController,
-                      style: TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: "Student ID No.",
-                        prefixIcon: Icon(Icons.badge, color: Colors.white70),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        filled: true,
-                        fillColor: Color(0xFF1E1E1E),
-                      ),
-                      validator: (val) => val!.isEmpty ? "Enter Student ID" : null,
+                      style: const TextStyle(color: kTextPrimary),
+                      decoration: rentXInputDecoration("Student ID No.", hint: "e.g., 2023A7PS0001P"),
+                      validator: (val) => val == null || val.trim().isEmpty ? "Enter Student ID" : null,
                     ),
-                    SizedBox(height: 20),
+                    const SizedBox(height: 16),
 
-                    // HOSTEL DROPDOWN
+                    rentXSectionLabel("CAMPUS RESIDENCE"),
                     DropdownButtonFormField<String>(
                       value: _selectedHostel,
-                      dropdownColor: Color(0xFF1E1E1E),
-                      style: TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: "Select Hostel",
-                        prefixIcon: Icon(Icons.home, color: Colors.white70),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        filled: true,
-                        fillColor: Color(0xFF1E1E1E),
-                      ),
-                      items: _hostels.map((h) => DropdownMenuItem(value: h, child: Text(h))).toList(),
+                      dropdownColor: kSurface2,
+                      style: const TextStyle(color: kTextPrimary),
+                      decoration: rentXInputDecoration("Select Hostel / Bhavan"),
+                      items: _hostels.map((h) => DropdownMenuItem(value: h, child: Text("$h Bhavan"))).toList(),
                       onChanged: (val) => setState(() => _selectedHostel = val),
                       validator: (val) => val == null ? "Please select your hostel" : null,
                     ),
-                    SizedBox(height: 40),
+                    const SizedBox(height: 36),
 
-                    // SAVE BUTTON
-                    SizedBox(
-                      width: double.infinity,
-                      height: 55,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
-                        ),
-                        onPressed: _isLoading ? null : _saveProfile,
-                        child: _isLoading 
-                          ? CircularProgressIndicator(color: Colors.black) 
-                          : Text(widget.isEditing ? "UPDATE PROFILE" : "SAVE & CONTINUE", style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
-                      ),
-                    )
+                    rentXButton(
+                      label: widget.isEditing ? "UPDATE PROFILE" : "SAVE & CONTINUE",
+                      onTap: _saveProfile,
+                      loading: _isLoading,
+                      icon: Icons.check_circle_outline,
+                    ),
                   ],
                 ),
               ),
