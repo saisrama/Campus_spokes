@@ -10,7 +10,11 @@ class ReceivedBookingsScreen extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      appBar: AppBar(title: Text("Received Bookings")),
+      backgroundColor: Color(0xFF121212),
+      appBar: AppBar(
+        backgroundColor: Color(0xFF1E1E1E),
+        title: Text("Received Bookings"),
+      ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('bookings')
@@ -19,17 +23,17 @@ class ReceivedBookingsScreen extends StatelessWidget {
             .orderBy('createdAt', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator());
-          if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
+          if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: Colors.indigoAccent));
+          if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: TextStyle(color: Colors.white)));
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                   Icon(Icons.bookmark_border, size: 60, color: Colors.grey),
-                   SizedBox(height: 10),
-                   Text("No upcoming or current bookings.", style: TextStyle(color: Colors.grey)),
+                  Icon(Icons.bookmark_border, size: 60, color: Colors.grey),
+                  SizedBox(height: 10),
+                  Text("No upcoming or current bookings.", style: TextStyle(color: Colors.grey)),
                 ],
               ),
             );
@@ -44,9 +48,11 @@ class ReceivedBookingsScreen extends StatelessWidget {
               var booking = docs[index].data() as Map<String, dynamic>;
               String bookingId = docs[index].id;
               String status = booking['status'] ?? 'unknown';
-              String cycleName = booking['cycleData']?['modelName'] ?? "Cycle";
+
+              String listingName = booking['itemData']?['itemName'] ?? booking['cycleData']?['modelName'] ?? "Listing";
+              bool isItem = booking.containsKey('itemId');
               String renterId = booking['userId'];
-              
+
               DateTime? createdAt;
               if (booking['createdAt'] != null) {
                 createdAt = (booking['createdAt'] as Timestamp).toDate();
@@ -57,14 +63,13 @@ class ReceivedBookingsScreen extends StatelessWidget {
                 builder: (context, userSnapshot) {
                   String renterName = "Loading...";
                   String renterPhone = "";
-                  
+
                   if (userSnapshot.connectionState == ConnectionState.done) {
                     if (userSnapshot.hasData && userSnapshot.data!.exists) {
                       var userData = userSnapshot.data!.data() as Map<String, dynamic>;
                       renterName = userData['displayName'] ?? "User";
                       renterPhone = userData['phoneNumber'] ?? "";
                     } else {
-                      // Fallback: Check if booking has snapshot data (future proofing)
                       renterName = booking['renterName'] ?? "Unknown User";
                       renterPhone = booking['renterPhone'] ?? "";
                     }
@@ -80,27 +85,22 @@ class ReceivedBookingsScreen extends StatelessWidget {
                       },
                       leading: CircleAvatar(
                         backgroundColor: _getStatusColor(status).withOpacity(0.1),
-                        child: Icon(_getStatusIcon(status), color: _getStatusColor(status)),
+                        child: Icon(_getStatusIcon(status, isItem: isItem), color: _getStatusColor(status)),
                       ),
-                      title: Text(cycleName, style: TextStyle(fontWeight: FontWeight.bold)),
+                      title: Text(listingName, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text("Renter: $renterName", style: TextStyle(color: Colors.white70)),
                           if (renterPhone.isNotEmpty)
-                             Text("Phone: $renterPhone", style: TextStyle(color: Colors.white54, fontSize: 11)),
-                          
+                            Text("Phone: $renterPhone", style: TextStyle(color: Colors.white54, fontSize: 11)),
                           SizedBox(height: 4),
-                          Text("Status: ${status.toUpperCase()}", style: TextStyle(
-                            color: _getStatusColor(status), fontSize: 12, fontWeight: FontWeight.bold
-                          )),
-                          
+                          Text("Status: ${status.toUpperCase()}", style: TextStyle(color: _getStatusColor(status), fontSize: 12, fontWeight: FontWeight.bold)),
                           if (status == 'cancelled')
-                             Text(
-                               "Cancellation Fee: ₹${(booking['cancellationFee'] ?? booking['finalCost'] ?? 0).toString()}", 
-                               style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)
-                             ),
-
+                            Text(
+                              "Cancellation Fee: ₹${(booking['cancellationFee'] ?? booking['finalCost'] ?? 0).toString()}",
+                              style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+                            ),
                           if (createdAt != null)
                             Text("Booked on: ${DateFormat('MMM dd, hh:mm a').format(createdAt)}", style: TextStyle(fontSize: 10, color: Colors.grey)),
                         ],
@@ -117,9 +117,9 @@ class ReceivedBookingsScreen extends StatelessWidget {
     );
   }
 
-  IconData _getStatusIcon(String status) {
+  IconData _getStatusIcon(String status, {required bool isItem}) {
     if (status == 'completed') return Icons.check_circle;
-    if (status == 'started') return Icons.pedal_bike;
+    if (status == 'started') return isItem ? Icons.inventory_2 : Icons.pedal_bike;
     if (status == 'booked') return Icons.bookmark;
     if (status == 'payment_pending') return Icons.payment;
     if (status == 'cancelled') return Icons.cancel;

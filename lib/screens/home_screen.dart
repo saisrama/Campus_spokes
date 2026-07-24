@@ -22,7 +22,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final User? user = FirebaseAuth.instance.currentUser;
   String _selectedLocation = "All";
-  final List<String> _locations = ["All", "VK Back Gate", "Mess 2", "VM Cycle Parking", "Mess 1", "Ganga/Meera Parking"];
+  final List<String> _locations = ["All", "VK Back Gate", "Mess 2", "VM Cycle Parking", "Mess 1", "Ganga/Meera Parking", "SAC/Malviya Parking"];
   
   // Time Slot Selection
   DateTime? _selectedStartTime;
@@ -298,13 +298,12 @@ class _HomeScreenState extends State<HomeScreen> {
                  }).toList();
               }
 
-              // 4. Owner Availability Filter
-              // isAvailable is ONLY controlled by the owner's manual toggle in My Listings.
-              // System never changes this field. _validateBookingSlot handles booking conflicts.
+              // 4. Owner Delist Filter
+              // Uses 'ownerDisabled' field — independent of legacy 'isAvailable' data.
+              // Defaults to false (visible) if field doesn't exist.
               docs = docs.where((d) {
                  var data = d.data() as Map<String, dynamic>;
-                 // Hide only if owner manually delisted
-                 if (data['isAvailable'] == false) return false;
+                 if (data['ownerDisabled'] == true) return false;
                  return true;
               }).toList();
 

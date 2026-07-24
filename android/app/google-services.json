@@ -51,11 +51,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "960573537207-pjbk7glm5cebeh4vs60ej662edfq5pnq.apps.googleusercontent.com",
+          "client_id": "960573537207-f9oop378l1o9f0ds6vae1k1vfht7jssg.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.sreerama.campuspks",
-            "certificate_hash": "6aac8a2aa81c21bee73b799ed442b355eed57274"
+            "certificate_hash": "da44136172e756e93b7955b2c8817305c833393c"
           }
         },
         {

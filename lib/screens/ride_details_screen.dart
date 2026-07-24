@@ -256,25 +256,37 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
             ),
             SizedBox(height: 20),
 
-            // CYCLE DETAILS
-            Text("Cycle Details", style: TextStyle(color: Colors.grey, fontSize: 14)),
+            // LISTING DETAILS
+            Text(widget.booking.containsKey('itemId') ? "Item Details" : "Cycle Details", style: TextStyle(color: Colors.grey, fontSize: 14)),
             SizedBox(height: 8),
             FutureBuilder<DocumentSnapshot>(
-              future: FirebaseFirestore.instance.collection('cycles').doc(cycleId).get(),
+              future: widget.booking.containsKey('itemId')
+                  ? FirebaseFirestore.instance.collection('items').doc(widget.booking['itemId']).get()
+                  : FirebaseFirestore.instance.collection('cycles').doc(cycleId).get(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) return LinearProgressIndicator();
                 
-                String cycleName = "Unknown Cycle";
+                String listingName = "Unknown Item/Cycle";
                 String imageUrl = "";
                 String location = "Unknown Location";
 
                 if (snapshot.hasData && snapshot.data!.exists) {
                   var data = snapshot.data!.data() as Map<String, dynamic>;
-                  cycleName = data['modelName'] ?? "Unknown Cycle";
+                  listingName = data['itemName'] ?? data['modelName'] ?? "Unknown Listing";
                   imageUrl = data['imageUrl'] ?? "";
                   location = data['location'] ?? "Unknown Location";
+                } else if (widget.booking['itemData'] != null) {
+                  var data = widget.booking['itemData'];
+                  listingName = data['itemName'] ?? "Item";
+                  imageUrl = data['imageUrl'] ?? "";
+                  location = data['location'] ?? "Campus";
+                } else if (widget.booking['cycleData'] != null) {
+                  var data = widget.booking['cycleData'];
+                  listingName = data['modelName'] ?? "Cycle";
+                  imageUrl = data['imageUrl'] ?? "";
+                  location = data['location'] ?? "Campus";
                 } else {
-                    return Text("Cycle information no longer available.");
+                    return Text("Listing information no longer available.");
                 }
 
                 return Card(
@@ -297,7 +309,7 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(cycleName, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                            Text(listingName, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                             SizedBox(height: 4),
                             Row(
                               children: [

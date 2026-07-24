@@ -10,7 +10,11 @@ class RideHistoryScreen extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      appBar: AppBar(title: Text("Your Rides")),
+      backgroundColor: Color(0xFF121212),
+      appBar: AppBar(
+        backgroundColor: Color(0xFF1E1E1E),
+        title: Text("Your Rides & Rentals"),
+      ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('bookings')
@@ -18,8 +22,8 @@ class RideHistoryScreen extends StatelessWidget {
             .orderBy('createdAt', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator());
-          if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
+          if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: Colors.indigoAccent));
+          if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: TextStyle(color: Colors.white)));
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return Center(
@@ -28,7 +32,7 @@ class RideHistoryScreen extends StatelessWidget {
                 children: [
                   Icon(Icons.history, size: 60, color: Colors.grey),
                   SizedBox(height: 10),
-                  Text("No rides yet.", style: TextStyle(color: Colors.grey)),
+                  Text("No rides or item rentals yet.", style: TextStyle(color: Colors.grey)),
                 ],
               ),
             );
@@ -41,31 +45,27 @@ class RideHistoryScreen extends StatelessWidget {
             itemCount: docs.length,
             itemBuilder: (context, index) {
               var booking = docs[index].data() as Map<String, dynamic>;
-              var cycleData = booking['cycleData'] ?? {}; 
-              // Note: If cycleData wasn't saved in booking, we might need to fetch it or handle it. 
-              // In our flow, we haven't explicitly saved cycleData to booking, only cycleId.
-              // For a robust history, we should have saved a snapshot.
-              // Let's assume for now we might need to fetch it or show generic info if missing.
-              // To make this work immediately without complex joins, we'll try to use cycleId to fetch or just show ID/Status.
-              // WAIT! cycle_detail_screen.dart didn't save cycleData snapshot. 
-              // IMPROVEMENT: We should really save a snapshot of cycle details in booking for history purposes 
-              // in case the cycle is deleted later. 
-              // For now, let's try to display what we have and maybe fetch cycle details if possible, 
-              // or just rely on IDs/Status if that's all we have. 
-              // Actually, looking at previous code, we only saved 'cycleId'. 
-              // Let's do a FutureBuilder for each card? No, that's heavy.
-              // Let's just show Status, Date, Cost for now. Cycle Name might be missing if we didn't save it.
-              
-              // RETROACTIVE FIX: We should have saved 'modelName' in booking. 
-              // Since we didn't, let's just show "Cycle Ride" and the Date/Cost.
-              
+              var itemData = booking['itemData'] as Map<String, dynamic>?;
+              var cycleData = booking['cycleData'] as Map<String, dynamic>?;
+
+              String title = "Rental Session";
+              if (itemData != null && itemData['itemName'] != null) {
+                title = "Item: ${itemData['itemName']}";
+              } else if (cycleData != null && cycleData['modelName'] != null) {
+                title = "Cycle: ${cycleData['modelName']}";
+              } else if (booking.containsKey('itemId')) {
+                title = "Item Rental";
+              } else {
+                title = "Cycle Ride";
+              }
+
               String status = booking['status'] ?? 'Unknown';
               DateTime? date;
               if (booking['createdAt'] != null) {
                 date = (booking['createdAt'] as Timestamp).toDate();
               }
-              
-              double cost = (booking['finalCost'] ?? 0).toDouble();
+
+              double cost = (booking['finalCost'] ?? booking['basePrice'] ?? 0).toDouble();
               int rating = (booking['rating'] ?? 0).toInt();
 
               return Card(
@@ -78,37 +78,49 @@ class RideHistoryScreen extends StatelessWidget {
                   },
                   leading: CircleAvatar(
                     backgroundColor: Colors.white10,
-                    child: Icon(_getStatusIcon(status), color: _getStatusColor(status)),
+                    child: Icon(_getStatusIcon(status, isItem: booking.containsKey('itemId')), color: _getStatusColor(status)),
                   ),
                   title: Text(
-                    date != null ? DateFormat('MMM dd, yyyy • hh:mm a').format(date) : "Unknown Date",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)
+                    title,
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
                   ),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Status: ${status.toUpperCase()}", style: TextStyle(
-                        color: _getStatusColor(status), fontSize: 12, fontWeight: FontWeight.bold
-                      )),
+                      SizedBox(height: 4),
+                      Text(
+                        date != null ? DateFormat('MMM dd, yyyy • hh:mm a').format(date) : "Unknown Date",
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        "Status: ${status.toUpperCase()}",
+                        style: TextStyle(color: _getStatusColor(status), fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
                       if (status == 'completed') ...[
                         Text("Cost: ₹${cost.toStringAsFixed(0)}", style: TextStyle(color: Colors.white70, fontSize: 12)),
-                        if (rating > 0) 
-                          Row(children: List.generate(5, (i) => Icon(
-                            i < rating ? Icons.star : Icons.star_border, 
-                            size: 12, color: Colors.amber
-                          ))),
+                        if (rating > 0)
+                          Row(
+                            children: List.generate(
+                              5,
+                              (i) => Icon(
+                                i < rating ? Icons.star : Icons.star_border,
+                                size: 12,
+                                color: Colors.amber,
+                              ),
+                            ),
+                          ),
                       ] else if (status == 'cancelled') ...[
-                         // Show fee if any
-                         Text(
-                           "Fee: ₹${(booking['cancellationFee'] ?? booking['finalCost'] ?? 0).toString()}", 
-                           style: TextStyle(color: Colors.redAccent, fontSize: 12)
-                         ),
+                        Text(
+                          "Fee: ₹${(booking['cancellationFee'] ?? booking['finalCost'] ?? 0).toString()}",
+                          style: TextStyle(color: Colors.redAccent, fontSize: 12),
+                        ),
                       ]
                     ],
                   ),
-                  trailing: status == 'completed' 
-                    ? Icon(Icons.check_circle, color: Colors.green)
-                    : (status == 'cancelled' ? Icon(Icons.cancel, color: Colors.red) : Icon(Icons.incomplete_circle, color: Colors.amber)),
+                  trailing: status == 'completed'
+                      ? Icon(Icons.check_circle, color: Colors.green)
+                      : (status == 'cancelled' ? Icon(Icons.cancel, color: Colors.red) : Icon(Icons.incomplete_circle, color: Colors.amber)),
                 ),
               );
             },
@@ -118,9 +130,9 @@ class RideHistoryScreen extends StatelessWidget {
     );
   }
 
-  IconData _getStatusIcon(String status) {
+  IconData _getStatusIcon(String status, {required bool isItem}) {
     if (status == 'completed') return Icons.flag;
-    if (status == 'started') return Icons.pedal_bike;
+    if (status == 'started') return isItem ? Icons.inventory_2 : Icons.pedal_bike;
     if (status == 'booked') return Icons.bookmark;
     if (status == 'end_requested') return Icons.timer;
     if (status == 'cancelled') return Icons.cancel;

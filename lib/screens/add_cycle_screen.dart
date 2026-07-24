@@ -385,7 +385,7 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
               DropdownButtonFormField<String>(
                 initialValue: location,
                 decoration: InputDecoration(labelText: "Parked At", border: OutlineInputBorder()),
-                items: ["VK Back Gate", "Mess 2", "VM Cycle Parking", "Mess 1", "Ganga/Meera Parking"]
+                items: ["VK Back Gate", "Mess 2", "VM Cycle Parking", "Mess 1", "Ganga/Meera Parking", "SAC/Malviya Parking"]
                     .map((l) => DropdownMenuItem(value: l, child: Text(l))).toList(),
                 onChanged: (v) => setState(() => location = v!),
               ),
