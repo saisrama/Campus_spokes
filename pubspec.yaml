@@ -58,6 +58,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.4
 
 flutter_launcher_icons:
   android: "ic_launcher"
@@ -69,6 +70,13 @@ flutter_launcher_icons:
     image_path: "assets/images/RentX_logo.png"
     background_color: "#000000"
     theme_color: "#000000"
+
+flutter_native_splash:
+  color: "#000000"
+  image: "assets/images/RentX_logo.png"
+  android_12:
+    color: "#000000"
+    image: "assets/images/RentX_logo.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
