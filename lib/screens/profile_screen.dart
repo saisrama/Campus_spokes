@@ -41,56 +41,108 @@ class ProfileScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         children: [
-          // PROFILE HEADER CARD
+          // PROFILE HEADER CARD (COMPACT HORIZONTAL)
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
               color: const Color(0xFF09090B),
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(20),
               border: Border.all(color: const Color(0xFF27272A)),
             ),
-            child: Column(
+            child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(3),
+                  padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: const Color(0xFF27272A), width: 2),
+                    border: Border.all(color: const Color(0xFF27272A), width: 1.5),
                   ),
                   child: CircleAvatar(
-                    radius: 44,
+                    radius: 26,
                     backgroundImage: NetworkImage(user?.photoURL ?? "https://via.placeholder.com/150"),
                     backgroundColor: const Color(0xFF18181B),
                   ),
                 ),
-                const SizedBox(height: 14),
-                Text(
-                  user?.displayName ?? "Student",
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFFFAFAFA)),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  user?.email ?? "",
-                  style: const TextStyle(color: Color(0xFFA1A1AA), fontSize: 13),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF18181B),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFF27272A)),
-                  ),
-                  child: const Text(
-                    "Rent Anything • Buy Anything • Ride Anywhere",
-                    style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.w600),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        user?.displayName ?? "Student",
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFFAFAFA)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        user?.email ?? "",
+                        style: const TextStyle(color: Color(0xFFA1A1AA), fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
+
+          // PLATFORM NOTICE CARD
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF09090B),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFF27272A)),
+            ),
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF94A3B8).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: const Icon(Icons.gavel_rounded, color: Color(0xFF94A3B8), size: 16),
+                    ),
+                    const SizedBox(width: 10),
+                    const Text(
+                      "Platform Notice",
+                      style: TextStyle(color: Color(0xFFFAFAFA), fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  "RentX acts solely as a peer-to-peer intermediary platform connecting students on campus. "
+                  "All transactions, rentals, and purchases are conducted directly between the parties involved.",
+                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, height: 1.6),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "RentX bears no liability for disputes, damages, losses, or misrepresentations arising from any listing or transaction. "
+                  "Users are advised to verify item condition before accepting and to resolve any issues directly with the owner/seller.",
+                  style: TextStyle(color: Color(0xFF71717A), fontSize: 11, height: 1.6),
+                ),
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () => _showTermsSheet(context),
+                  child: const Text(
+                    "Read full Terms & Conditions →",
+                    style: TextStyle(color: Color(0xFF38BDF8), fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
 
           // MENU GROUP
           Container(
@@ -155,14 +207,6 @@ class ProfileScreen extends StatelessWidget {
                     }
                   },
                 ),
-                const Divider(color: Color(0xFF18181B), height: 1),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.gavel_rounded,
-                  color: const Color(0xFF94A3B8),
-                  title: "Terms & Conditions",
-                  onTap: () => _showTermsSheet(context),
-                ),
               ],
             ),
           ),
@@ -189,61 +233,7 @@ class ProfileScreen extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 16),
-
-          // TERMS & CONDITIONS CARD
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF09090B),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFF27272A)),
-            ),
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(7),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF94A3B8).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                      child: const Icon(Icons.gavel_rounded, color: Color(0xFF94A3B8), size: 16),
-                    ),
-                    const SizedBox(width: 10),
-                    const Text(
-                      "Platform Notice",
-                      style: TextStyle(color: Color(0xFFFAFAFA), fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  "RentX acts solely as a peer-to-peer intermediary platform connecting students on campus. "
-                  "All transactions, rentals, and purchases are conducted directly between the parties involved.",
-                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, height: 1.6),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  "RentX bears no liability for disputes, damages, losses, or misrepresentations arising from any listing or transaction. "
-                  "Users are advised to verify item condition before accepting and to resolve any issues directly with the owner/seller.",
-                  style: TextStyle(color: Color(0xFF71717A), fontSize: 11, height: 1.6),
-                ),
-                const SizedBox(height: 12),
-                GestureDetector(
-                  onTap: () => _showTermsSheet(context),
-                  child: const Text(
-                    "Read full Terms & Conditions →",
-                    style: TextStyle(color: Color(0xFF38BDF8), fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 16),
+          const SizedBox(height: 28),
 
           // CREDITS & ACKNOWLEDGMENTS
           Padding(
