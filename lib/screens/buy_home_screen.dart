@@ -20,7 +20,7 @@ class _BuyHomeScreenState extends State<BuyHomeScreen> {
   final User? user = FirebaseAuth.instance.currentUser;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
-  String _searchQuery = '';
+  final ValueNotifier<String> _searchQuery = ValueNotifier('');
 
   List<String> _selectedCategories = [];
   List<String> _selectedLocations = [];
@@ -46,6 +46,7 @@ class _BuyHomeScreenState extends State<BuyHomeScreen> {
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _searchQuery.dispose();
     super.dispose();
   }
 
@@ -211,7 +212,7 @@ class _BuyHomeScreenState extends State<BuyHomeScreen> {
               controller: _searchController,
               focusNode: _searchFocusNode,
               onChanged: (val) {
-                setState(() => _searchQuery = val.toLowerCase().trim());
+                _searchQuery.value = val.toLowerCase().trim();
               },
               style: const TextStyle(color: Colors.white, fontSize: 14),
               decoration: const InputDecoration(
@@ -370,74 +371,79 @@ class _BuyHomeScreenState extends State<BuyHomeScreen> {
           if (snapshot.hasError) return const Center(child: Text("Error", style: TextStyle(color: Colors.white)));
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Colors.orangeAccent));
 
-          var docs = snapshot.data!.docs;
+          var allDocs = snapshot.data!.docs;
 
           // Exclude own items
-          if (user != null) docs = docs.where((d) { final dd = d.data() as Map<String, dynamic>; return dd['ownerId'] != user!.uid; }).toList();
+          if (user != null) allDocs = allDocs.where((d) { final dd = d.data() as Map<String, dynamic>; return dd['ownerId'] != user!.uid; }).toList();
 
           // Filter sold
-          if (!_showSoldItems) docs = docs.where((d) { final dd = d.data() as Map<String, dynamic>; return dd['isSold'] != true; }).toList();
+          if (!_showSoldItems) allDocs = allDocs.where((d) { final dd = d.data() as Map<String, dynamic>; return dd['isSold'] != true; }).toList();
 
           // Owner disabled
-          docs = docs.where((d) { final dd = d.data() as Map<String, dynamic>; return dd['ownerDisabled'] != true; }).toList();
+          allDocs = allDocs.where((d) { final dd = d.data() as Map<String, dynamic>; return dd['ownerDisabled'] != true; }).toList();
 
           // Category filter
-          if (_selectedCategories.isNotEmpty) docs = docs.where((d) { final dd = d.data() as Map<String, dynamic>; return _selectedCategories.contains(dd['itemType']); }).toList();
+          if (_selectedCategories.isNotEmpty) allDocs = allDocs.where((d) { final dd = d.data() as Map<String, dynamic>; return _selectedCategories.contains(dd['itemType']); }).toList();
 
           // Location filter
-          if (_selectedLocations.isNotEmpty) docs = docs.where((d) { final dd = d.data() as Map<String, dynamic>; return _selectedLocations.contains(dd['location']); }).toList();
-
-          // Search
-          if (_searchQuery.isNotEmpty) {
-            docs = docs.where((d) {
-              final dd = d.data() as Map<String, dynamic>;
-              return (dd['itemName'] ?? '').toLowerCase().contains(_searchQuery) ||
-                  (dd['itemType'] ?? '').toLowerCase().contains(_searchQuery) ||
-                  (dd['description'] ?? '').toLowerCase().contains(_searchQuery);
-            }).toList();
-          }
+          if (_selectedLocations.isNotEmpty) allDocs = allDocs.where((d) { final dd = d.data() as Map<String, dynamic>; return _selectedLocations.contains(dd['location']); }).toList();
 
           // Sort
-          if (_sortBy == 'price_asc') docs.sort((a, b) { final ad = a.data() as Map<String, dynamic>; final bd = b.data() as Map<String, dynamic>; return (ad['price'] ?? 0).compareTo(bd['price'] ?? 0); });
-          else if (_sortBy == 'price_desc') docs.sort((a, b) { final ad = a.data() as Map<String, dynamic>; final bd = b.data() as Map<String, dynamic>; return (bd['price'] ?? 0).compareTo(ad['price'] ?? 0); });
-          else if (_sortBy == 'newest') docs.sort((a, b) { final ad = a.data() as Map<String, dynamic>; final bd = b.data() as Map<String, dynamic>; final at = ad['createdAt']; final bt = bd['createdAt']; if (at == null || bt == null) return 0; return (bt as dynamic).compareTo(at as dynamic); });
+          if (_sortBy == 'price_asc') allDocs.sort((a, b) { final ad = a.data() as Map<String, dynamic>; final bd = b.data() as Map<String, dynamic>; return (ad['price'] ?? 0).compareTo(bd['price'] ?? 0); });
+          else if (_sortBy == 'price_desc') allDocs.sort((a, b) { final ad = a.data() as Map<String, dynamic>; final bd = b.data() as Map<String, dynamic>; return (bd['price'] ?? 0).compareTo(ad['price'] ?? 0); });
+          else if (_sortBy == 'newest') allDocs.sort((a, b) { final ad = a.data() as Map<String, dynamic>; final bd = b.data() as Map<String, dynamic>; final at = ad['createdAt']; final bt = bd['createdAt']; if (at == null || bt == null) return 0; return (bt as dynamic).compareTo(at as dynamic); });
 
-          return CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(child: _buildSearchAndFilterBar()),
-              SliverToBoxAdapter(child: _buildActiveFilterPills()),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: Text("${docs.length} listing${docs.length == 1 ? '' : 's'}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                ),
-              ),
-              if (docs.isEmpty)
-                SliverToBoxAdapter(child: Padding(
-                  padding: const EdgeInsets.only(top: 60),
-                  child: Center(child: Column(children: [
-                    const Icon(Icons.search_off, size: 60, color: Colors.grey),
-                    const SizedBox(height: 12),
-                    Text(_searchQuery.isNotEmpty ? 'Nothing found for "$_searchQuery"' : "No items match your filters.", style: const TextStyle(color: Colors.grey)),
-                    if (_activeFilterCount > 0) ...[
-                      const SizedBox(height: 12),
-                      TextButton(
-                        onPressed: () => setState(() { _selectedCategories.clear(); _selectedLocations.clear(); _sortBy = 'default'; _showSoldItems = false; }),
-                        child: const Text("Clear Filters", style: TextStyle(color: Colors.orangeAccent)),
-                      ),
-                    ],
-                  ])),
-                ))
-              else
-                SliverList(delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final data = docs[index].data() as Map<String, dynamic>;
-                    return _buildItemCard(data, docs[index].id);
-                  },
-                  childCount: docs.length,
-                )),
-              const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
-            ],
+          return ValueListenableBuilder<String>(
+            valueListenable: _searchQuery,
+            builder: (context, searchVal, _) {
+              var docs = allDocs;
+              if (searchVal.isNotEmpty) {
+                docs = docs.where((d) {
+                  final dd = d.data() as Map<String, dynamic>;
+                  return (dd['itemName'] ?? '').toLowerCase().contains(searchVal) ||
+                      (dd['itemType'] ?? '').toLowerCase().contains(searchVal) ||
+                      (dd['description'] ?? '').toLowerCase().contains(searchVal);
+                }).toList();
+              }
+
+              return CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(child: _buildSearchAndFilterBar()),
+                  SliverToBoxAdapter(child: _buildActiveFilterPills()),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      child: Text("${docs.length} listing${docs.length == 1 ? '' : 's'}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                    ),
+                  ),
+                  if (docs.isEmpty)
+                    SliverToBoxAdapter(child: Padding(
+                      padding: const EdgeInsets.only(top: 60),
+                      child: Center(child: Column(children: [
+                        const Icon(Icons.search_off, size: 60, color: Colors.grey),
+                        const SizedBox(height: 12),
+                        Text(searchVal.isNotEmpty ? 'Nothing found for "$searchVal"' : "No items match your filters.", style: const TextStyle(color: Colors.grey)),
+                        if (_activeFilterCount > 0) ...[
+                          const SizedBox(height: 12),
+                          TextButton(
+                            onPressed: () => setState(() { _selectedCategories.clear(); _selectedLocations.clear(); _sortBy = 'default'; _showSoldItems = false; }),
+                            child: const Text("Clear Filters", style: TextStyle(color: Colors.orangeAccent)),
+                          ),
+                        ],
+                      ])),
+                    ))
+                  else
+                    SliverList(delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final data = docs[index].data() as Map<String, dynamic>;
+                        return _buildItemCard(data, docs[index].id);
+                      },
+                      childCount: docs.length,
+                    )),
+                  const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+                ],
+              );
+            },
           );
         },
       ),

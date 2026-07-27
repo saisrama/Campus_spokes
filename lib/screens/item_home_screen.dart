@@ -23,7 +23,7 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
   // Search
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
-  String _searchQuery = '';
+  final ValueNotifier<String> _searchQuery = ValueNotifier('');
 
   // Filter state
   List<String> _selectedCategories = [];
@@ -69,6 +69,7 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _searchQuery.dispose();
     super.dispose();
   }
 
@@ -419,7 +420,7 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
                 controller: _searchController,
                 focusNode: _searchFocusNode,
                 onChanged: (val) {
-                  setState(() => _searchQuery = val.toLowerCase().trim());
+                  _searchQuery.value = val.toLowerCase().trim();
                 },
                 style: const TextStyle(color: Colors.white, fontSize: 14),
                 decoration: const InputDecoration(
@@ -840,33 +841,33 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
               if (snapshot.hasError) return const Center(child: Text("Error loading items", style: TextStyle(color: Colors.white)));
               if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Colors.indigoAccent));
 
-              var docs = snapshot.data!.docs;
+              var allDocs = snapshot.data!.docs;
 
               // Filter out active item from available items
               if (activeBooking != null) {
                 final abMap = activeBooking.data() as Map<String, dynamic>?;
                 if (abMap != null && abMap.containsKey('itemId')) {
-                  docs = docs.where((d) => d.id != abMap['itemId']).toList();
+                  allDocs = allDocs.where((d) => d.id != abMap['itemId']).toList();
                 }
               }
 
               // Exclude own items
               if (user != null) {
-                docs = docs.where((d) {
+                allDocs = allDocs.where((d) {
                   var data = d.data() as Map<String, dynamic>;
                   return data['ownerId'] != user!.uid;
                 }).toList();
               }
 
               // Exclude disabled items
-              docs = docs.where((d) {
+              allDocs = allDocs.where((d) {
                 var data = d.data() as Map<String, dynamic>;
                 return data['ownerDisabled'] != true;
               }).toList();
 
               // Category filter
               if (_selectedCategories.isNotEmpty) {
-                docs = docs.where((d) {
+                allDocs = allDocs.where((d) {
                   var data = d.data() as Map<String, dynamic>;
                   return _selectedCategories.contains(data['itemType']);
                 }).toList();
@@ -874,38 +875,27 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
 
               // Location filter
               if (_selectedLocations.isNotEmpty) {
-                docs = docs.where((d) {
+                allDocs = allDocs.where((d) {
                   var data = d.data() as Map<String, dynamic>;
                   return _selectedLocations.contains(data['location']);
                 }).toList();
               }
 
-              // Search filter
-              if (_searchQuery.isNotEmpty) {
-                docs = docs.where((d) {
-                  var data = d.data() as Map<String, dynamic>;
-                  final name = (data['itemName'] ?? '').toLowerCase();
-                  final type = (data['itemType'] ?? '').toLowerCase();
-                  final desc = (data['description'] ?? '').toLowerCase();
-                  return name.contains(_searchQuery) || type.contains(_searchQuery) || desc.contains(_searchQuery);
-                }).toList();
-              }
-
               // Sort
               if (_sortBy == 'price_asc') {
-                docs.sort((a, b) {
+                allDocs.sort((a, b) {
                   final ad = a.data() as Map<String, dynamic>;
                   final bd = b.data() as Map<String, dynamic>;
                   return (ad['basePrice'] ?? 0).compareTo(bd['basePrice'] ?? 0);
                 });
               } else if (_sortBy == 'price_desc') {
-                docs.sort((a, b) {
+                allDocs.sort((a, b) {
                   final ad = a.data() as Map<String, dynamic>;
                   final bd = b.data() as Map<String, dynamic>;
                   return (bd['basePrice'] ?? 0).compareTo(ad['basePrice'] ?? 0);
                 });
               } else if (_sortBy == 'newest') {
-                docs.sort((a, b) {
+                allDocs.sort((a, b) {
                   final ad = a.data() as Map<String, dynamic>;
                   final bd = b.data() as Map<String, dynamic>;
                   final at = ad['createdAt'];
@@ -915,95 +905,111 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
                 });
               }
 
-              return CustomScrollView(
-                slivers: [
-                  // Active Item Rental Banner
-                  if (activeBooking != null)
-                    SliverToBoxAdapter(
-                      child: _buildActiveItemRentalCard(context, activeBooking),
-                    ),
+              return ValueListenableBuilder<String>(
+                valueListenable: _searchQuery,
+                builder: (context, searchVal, _) {
+                  var docs = allDocs;
+                  if (searchVal.isNotEmpty) {
+                    docs = docs.where((d) {
+                      var data = d.data() as Map<String, dynamic>;
+                      final name = (data['itemName'] ?? '').toLowerCase();
+                      final type = (data['itemType'] ?? '').toLowerCase();
+                      final desc = (data['description'] ?? '').toLowerCase();
+                      return name.contains(searchVal) || type.contains(searchVal) || desc.contains(searchVal);
+                    }).toList();
+                  }
 
-                  // Time Slot Filter
-                  SliverToBoxAdapter(child: _buildTimeFilter()),
+                  return CustomScrollView(
+                    slivers: [
+                      // Active Item Rental Banner
+                      if (activeBooking != null)
+                        SliverToBoxAdapter(
+                          child: _buildActiveItemRentalCard(context, activeBooking),
+                        ),
 
-                  // Search + Filter/Sort row
-                  SliverToBoxAdapter(child: _buildSearchAndFilterBar()),
+                      // Time Slot Filter
+                      SliverToBoxAdapter(child: _buildTimeFilter()),
 
-              // Active filter pills
-              SliverToBoxAdapter(child: _buildActiveFilterPills()),
+                      // Search + Filter/Sort row
+                      SliverToBoxAdapter(child: _buildSearchAndFilterBar()),
 
-              // Results count
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: Text(
-                    "${docs.length} item${docs.length == 1 ? '' : 's'} found",
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                ),
-              ),
+                      // Active filter pills
+                      SliverToBoxAdapter(child: _buildActiveFilterPills()),
 
-              if (docs.isEmpty)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 60),
-                    child: Center(
-                      child: Column(
-                        children: [
-                          const Icon(Icons.search_off, size: 60, color: Colors.grey),
-                          const SizedBox(height: 12),
-                          Text(
-                            _searchQuery.isNotEmpty
-                                ? 'No items found for "$_searchQuery"'
-                                : "No items match your filters.",
-                            style: const TextStyle(color: Colors.grey),
-                            textAlign: TextAlign.center,
+                      // Results count
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          child: Text(
+                            "${docs.length} item${docs.length == 1 ? '' : 's'} found",
+                            style: const TextStyle(color: Colors.grey, fontSize: 12),
                           ),
-                          if (_activeFilterCount > 0) ...[
-                            const SizedBox(height: 12),
-                            TextButton(
-                              onPressed: () => setState(() {
-                                _selectedCategories.clear();
-                                _selectedLocations.clear();
-                                _sortBy = 'default';
-                              }),
-                              child: const Text("Clear Filters", style: TextStyle(color: Colors.indigoAccent)),
-                            ),
-                          ],
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                )
-              else
-                SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      var data = docs[index].data() as Map<String, dynamic>;
-                      String itemId = docs[index].id;
 
-                      double? dynamicTotal;
-                      if (_selectedStartTime != null && _selectedEndTime != null) {
-                        double durationHrs = _selectedEndTime!.difference(_selectedStartTime!).inMinutes / 60.0;
-                        if (durationHrs < 0) durationHrs = 0;
-                        double base = (data['basePrice'] ?? 0).toDouble();
-                        double hourly = (data['hourlyPrice'] ?? 0).toDouble();
-                        dynamicTotal = durationHrs <= 2 ? base : base + ((durationHrs - 2).ceil() * hourly);
-                      }
+                      if (docs.isEmpty)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 60),
+                            child: Center(
+                              child: Column(
+                                children: [
+                                  const Icon(Icons.search_off, size: 60, color: Colors.grey),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    searchVal.isNotEmpty
+                                        ? 'No items found for "$searchVal"'
+                                        : "No items match your filters.",
+                                    style: const TextStyle(color: Colors.grey),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  if (_activeFilterCount > 0) ...[
+                                    const SizedBox(height: 12),
+                                    TextButton(
+                                      onPressed: () => setState(() {
+                                        _selectedCategories.clear();
+                                        _selectedLocations.clear();
+                                        _sortBy = 'default';
+                                      }),
+                                      child: const Text("Clear Filters", style: TextStyle(color: Colors.indigoAccent)),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              var data = docs[index].data() as Map<String, dynamic>;
+                              String itemId = docs[index].id;
 
-                      return _buildItemCard(context, data, itemId, totalPrice: dynamicTotal);
-                    },
-                    childCount: docs.length,
-                  ),
-                ),
+                              double? dynamicTotal;
+                              if (_selectedStartTime != null && _selectedEndTime != null) {
+                                double durationHrs = _selectedEndTime!.difference(_selectedStartTime!).inMinutes / 60.0;
+                                if (durationHrs < 0) durationHrs = 0;
+                                double base = (data['basePrice'] ?? 0).toDouble();
+                                double hourly = (data['hourlyPrice'] ?? 0).toDouble();
+                                dynamicTotal = durationHrs <= 2 ? base : base + ((durationHrs - 2).ceil() * hourly);
+                              }
 
-              const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
-            ],
+                              return _buildItemCard(context, data, itemId, totalPrice: dynamicTotal);
+                            },
+                            childCount: docs.length,
+                          ),
+                        ),
+
+                      const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+                    ],
+                  );
+                },
+              );
+            },
           );
         },
-      );
-    },
-  ),
+      ),
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
