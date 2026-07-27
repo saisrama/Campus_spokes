@@ -156,65 +156,65 @@ class LandingScreen extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
+                  // Text-only title (no logo icon)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF09090B),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFF27272A)),
-                        ),
-                        child: Image.asset(
-                          'assets/images/RentX_logo.png',
-                          height: 32,
-                          width: 32,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) => const Icon(Icons.bolt, color: Colors.white, size: 24),
+                      Text(
+                        "RentX",
+                        style: GoogleFonts.plusJakartaSans(
+                          textStyle: const TextStyle(
+                            color: Color(0xFFFAFAFA),
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.8,
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "RentX",
-                            style: GoogleFonts.plusJakartaSans(
-                              textStyle: const TextStyle(
-                                color: Color(0xFFFAFAFA),
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.8,
-                              ),
-                            ),
-                          ),
-                          const Text(
-                            "CAMPUS MARKETPLACE",
-                            style: TextStyle(
-                              color: Color(0xFF71717A),
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                        ],
+                      const Text(
+                        "CAMPUS MARKETPLACE",
+                        style: TextStyle(
+                          color: Color(0xFF71717A),
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
                       ),
                     ],
                   ),
-                  // Profile Avatar
-                  GestureDetector(
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileScreen())),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: const Color(0xFF27272A), width: 2),
+                  // Right: Compass + Profile Avatar
+                  Row(
+                    children: [
+                      // Explore (compass) icon button
+                      GestureDetector(
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ExploreScreen())),
+                        child: Container(
+                          margin: const EdgeInsets.only(right: 10),
+                          padding: const EdgeInsets.all(9),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF09090B),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFF27272A)),
+                          ),
+                          child: const Icon(Icons.explore_outlined, color: Color(0xFF34D399), size: 22),
+                        ),
                       ),
-                      child: CircleAvatar(
-                        backgroundImage: NetworkImage(user?.photoURL ?? "https://via.placeholder.com/150"),
-                        backgroundColor: const Color(0xFF18181B),
-                        radius: 20,
+                      // Profile Avatar
+                      GestureDetector(
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileScreen())),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: const Color(0xFF27272A), width: 2),
+                          ),
+                          child: CircleAvatar(
+                            backgroundImage: NetworkImage(user?.photoURL ?? "https://via.placeholder.com/150"),
+                            backgroundColor: const Color(0xFF18181B),
+                            radius: 20,
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ],
               ),
@@ -306,21 +306,7 @@ class LandingScreen extends StatelessWidget {
                         MaterialPageRoute(builder: (_) => const BuyHomeScreen()),
                       ),
                     ),
-                    const SizedBox(height: 14),
 
-                    // CARD 4: EXPLORE DESTINATIONS
-                    _buildVercelCard(
-                      context,
-                      title: "Explore Destinations",
-                      subtitle: "Popular hangouts & eateries around BPHC campus",
-                      tag: "GUIDE",
-                      icon: Icons.explore_outlined,
-                      accentColor: const Color(0xFF34D399),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => ExploreScreen()),
-                      ),
-                    ),
                   ],
                 ),
               ),

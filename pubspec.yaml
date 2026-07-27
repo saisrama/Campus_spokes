@@ -94,6 +94,7 @@ flutter:
     - assets/images/
     - assets/images/RentX_logo.png
     - assets/images/logo.png
+    - assets/images/rentx_logo_new.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
