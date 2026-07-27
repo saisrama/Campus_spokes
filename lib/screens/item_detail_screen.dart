@@ -795,11 +795,31 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                     const SizedBox(height: 20),
 
                     rentXButton(
-                      label: "BOOK THIS ITEM NOW",
-                      onTap: _bookItem,
+                      label: _bookingStatus == 'none'
+                          ? "BOOK THIS ITEM NOW"
+                          : (_bookingStatus == 'booked' ? "START RENTAL SESSION" : (_bookingStatus == 'started' ? "END RENTAL & PAY" : "PAYMENT PENDING")),
+                      onTap: _bookingStatus == 'none'
+                          ? _showBookingConfirmationDialog
+                          : null,
                       icon: Icons.check_circle_outline,
                     ),
-                    _buildDisclaimerAndPolicyCard(),
+                    if (_bookingStatus == 'booked' || _bookingStatus == 'started') ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.redAccent),
+                            foregroundColor: Colors.redAccent,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          icon: const Icon(Icons.cancel_outlined, size: 18),
+                          label: const Text("CANCEL BOOKING (50% Fee)", style: TextStyle(fontWeight: FontWeight.bold)),
+                          onPressed: _cancelBooking,
+                        ),
+                      ),
+                    ],
                   ],
                   const SizedBox(height: 40),
                 ],
@@ -811,50 +831,200 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     );
   }
 
-  Widget _buildDisclaimerAndPolicyCard() {
-    return Container(
-      margin: const EdgeInsets.only(top: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: kSurface1,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kBorder),
+  void _showBookingConfirmationDialog() {
+    final startFmt = DateFormat('MMM d, h:mm a').format(_startTime);
+    final endFmt = DateFormat('MMM d, h:mm a').format(_endTime);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: kSurface1,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.shield_outlined, color: kAccentCyan, size: 18),
-              SizedBox(width: 8),
-              Text(
-                "Disclaimer & Policy",
-                style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold, fontSize: 14),
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(color: kTextDim, borderRadius: BorderRadius.circular(2)),
               ),
-            ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              "Confirm Item Rental Booking",
+              style: TextStyle(color: kTextPrimary, fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              "Please review the rental terms before confirming.",
+              style: TextStyle(color: kTextMuted, fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+
+            // SUMMARY CARD
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: kBgColor,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: kBorder),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(widget.data['itemName'] ?? 'Item', style: const TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold, fontSize: 15)),
+                      Text("₹${_totalCost.toStringAsFixed(0)}", style: const TextStyle(color: kAccentGreen, fontWeight: FontWeight.bold, fontSize: 16)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text("Slot: $startFmt - $endFmt", style: const TextStyle(color: kTextMuted, fontSize: 11)),
+                      Text("Duration: ${_durationInHours.toStringAsFixed(1)} hrs", style: const TextStyle(color: kTextMuted, fontSize: 11)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // POLICY POINTS
+            const Text("DISCLAIMER & POLICY", style: TextStyle(color: kAccentCyan, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+            const SizedBox(height: 10),
+            _buildPolicyPoint("No-Show", "Failure to start ride by end time results in full charge of reserved slot."),
+            const SizedBox(height: 6),
+            _buildPolicyPoint("Late Returns", "Charged at 2x the hourly rate for delays beyond the booked slot."),
+            const SizedBox(height: 6),
+            _buildPolicyPoint("Cancellation Fee", "Cancellation fee is 50% of the booking fee."),
+            const SizedBox(height: 6),
+            _buildPolicyPoint("Liability", "RentX facilitates connections only. We are not responsible for accidents, damages, or disputes."),
+            const SizedBox(height: 6),
+            _buildPolicyPoint("Disputes", "All financial or physical disputes must be resolved directly between Owner and Renter."),
+            const SizedBox(height: 20),
+
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kTextPrimary,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                icon: const Icon(Icons.check_circle, size: 20),
+                label: const Text("AGREE & CONFIRM BOOKING", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _bookItem();
+                },
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _cancelBooking() async {
+    if (_bookingId == null) return;
+    double cancellationFee = _totalCost * 0.5;
+
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kSurface1,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: kBorder)),
+        title: const Text("Cancel Item Booking?", style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Are you sure you want to cancel this booking?",
+              style: TextStyle(color: kTextMuted, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.redAccent, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Cancellation Fee (50%): ₹${cancellationFee.toStringAsFixed(0)}",
+                      style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("BACK", style: TextStyle(color: kTextDim)),
           ),
-          const SizedBox(height: 12),
-          _buildPolicyPoint("No-Show", "Failure to start ride by end time results in full charge of reserved slot."),
-          const SizedBox(height: 8),
-          _buildPolicyPoint("Late Returns", "Charged at 2x the hourly rate for delays beyond the booked slot."),
-          const SizedBox(height: 8),
-          _buildPolicyPoint("Liability", "RentX facilitates connections only. We are not responsible for accidents, damages, or disputes."),
-          const SizedBox(height: 8),
-          _buildPolicyPoint("Disputes", "All financial or physical disputes must be resolved directly between Owner and Renter."),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("CONFIRM CANCEL", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
         ],
       ),
     );
+
+    if (confirm != true) return;
+
+    try {
+      await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({
+        'status': 'cancelled',
+        'cancelledAt': FieldValue.serverTimestamp(),
+        'cancellationFee': cancellationFee,
+        'finalCost': cancellationFee,
+      });
+      if (mounted) {
+        setState(() => _bookingStatus = 'cancelled');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Booking cancelled. Cancellation fee: ₹${cancellationFee.toStringAsFixed(0)}"),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error cancelling booking: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
   }
 
   Widget _buildPolicyPoint(String title, String description) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("• ", style: TextStyle(color: kTextMuted, fontSize: 12, fontWeight: FontWeight.bold)),
+        const Text("• ", style: TextStyle(color: kTextMuted, fontSize: 11, fontWeight: FontWeight.bold)),
         Expanded(
           child: RichText(
             text: TextSpan(
-              style: const TextStyle(color: kTextMuted, fontSize: 12, height: 1.4),
+              style: const TextStyle(color: kTextMuted, fontSize: 11, height: 1.35),
               children: [
                 TextSpan(text: "$title: ", style: const TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
                 TextSpan(text: description),

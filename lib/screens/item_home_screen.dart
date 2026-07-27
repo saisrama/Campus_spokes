@@ -709,10 +709,113 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),
             ),
-          )
+          ),
+          if (status == 'booked' || status == 'started') ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.redAccent),
+                  foregroundColor: Colors.redAccent,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () => _cancelItemBookingByRenter(context, booking.id, bData),
+                child: const Text("CANCEL BOOKING (50% Fee)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              ),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  Future<void> _cancelItemBookingByRenter(BuildContext context, String bookingId, Map<String, dynamic> bData) async {
+    double base = 20.0;
+    if (bData['estimatedCost'] != null) {
+      base = (bData['estimatedCost'] as num).toDouble();
+    } else if (bData['basePrice'] != null) {
+      base = (bData['basePrice'] as num).toDouble();
+    } else if (bData['itemData']?['basePrice'] != null) {
+      base = (bData['itemData']['basePrice'] as num).toDouble();
+    }
+    double cancellationFee = base * 0.5;
+
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Cancel Item Booking?", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Are you sure you want to cancel this booking?",
+              style: TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.redAccent, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Cancellation Fee (50%): ₹${cancellationFee.toStringAsFixed(0)}",
+                      style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("BACK", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("CONFIRM CANCEL", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await FirebaseFirestore.instance.collection('bookings').doc(bookingId).update({
+        'status': 'cancelled',
+        'cancelledAt': FieldValue.serverTimestamp(),
+        'cancellationFee': cancellationFee,
+        'finalCost': cancellationFee,
+      });
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Booking cancelled. Cancellation fee: ₹${cancellationFee.toStringAsFixed(0)}"),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error cancelling booking: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
   }
 
   Widget _buildItemCard(BuildContext context, Map<String, dynamic> data, String itemId, {double? totalPrice}) {

@@ -403,9 +403,9 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
               ),
             ),
 
-            // OWNER ACTION BUTTON
-            if (isOwnerViewing && (_status == 'booked' || _status == 'started')) ...[
-              SizedBox(height: 30),
+            // ACTION BUTTON (OWNER & RENTER CANCEL)
+            if (_status == 'booked' || _status == 'started') ...[
+              const SizedBox(height: 30),
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -415,28 +415,127 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   icon: _isProcessing 
-                    ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : Icon(_status == 'started' ? Icons.stop_circle : Icons.cancel, color: Colors.white),
                   label: Text(
-                    _status == 'started' ? "END RIDE" : "CANCEL BOOKING",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                    isOwnerViewing 
+                        ? (_status == 'started' ? "END RIDE" : "CANCEL BOOKING (NO CHARGE)")
+                        : "CANCEL BOOKING (50% Fee)",
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   onPressed: _isProcessing ? null : () {
-                    if (_status == 'started') {
-                      _ownerEndRide();
+                    if (isOwnerViewing) {
+                      if (_status == 'started') {
+                        _ownerEndRide();
+                      } else {
+                        _ownerCancelBooking();
+                      }
                     } else {
-                      _ownerCancelBooking();
+                      _renterCancelBooking();
                     }
                   },
                 ),
               ),
             ],
 
-            SizedBox(height: 30),
+            const SizedBox(height: 30),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _renterCancelBooking() async {
+    double estimatedCost = 0.0;
+    if (widget.booking['estimatedCost'] != null) {
+      estimatedCost = (widget.booking['estimatedCost'] as num).toDouble();
+    } else if (widget.booking['basePrice'] != null) {
+      estimatedCost = (widget.booking['basePrice'] as num).toDouble();
+    } else if (widget.booking['cycleData']?['basePrice'] != null) {
+      estimatedCost = (widget.booking['cycleData']['basePrice'] as num).toDouble();
+    } else if (widget.booking['itemData']?['basePrice'] != null) {
+      estimatedCost = (widget.booking['itemData']['basePrice'] as num).toDouble();
+    } else {
+      estimatedCost = 20.0;
+    }
+    double cancellationFee = estimatedCost * 0.5;
+
+    bool confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Cancel Booking?", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Are you sure you want to cancel this booking?", style: TextStyle(color: Colors.white70)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.redAccent, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Cancellation Fee (50%): ₹${cancellationFee.toStringAsFixed(0)}",
+                      style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("BACK", style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("CONFIRM CANCEL", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    ) ?? false;
+
+    if (!confirmed) return;
+
+    setState(() => _isProcessing = true);
+
+    try {
+      await FirebaseFirestore.instance.collection('bookings').doc(widget.bookingId).update({
+        'status': 'cancelled',
+        'cancelledAt': FieldValue.serverTimestamp(),
+        'cancellationFee': cancellationFee,
+        'finalCost': cancellationFee,
+      });
+
+      setState(() {
+        _status = 'cancelled';
+        _finalCost = cancellationFee;
+        _isProcessing = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Booking cancelled. Cancellation fee: ₹${cancellationFee.toStringAsFixed(0)}"), backgroundColor: Colors.orange),
+        );
+      }
+    } catch (e) {
+      setState(() => _isProcessing = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
   }
 
   Widget _buildInfoRow(IconData icon, String label, String value) {
