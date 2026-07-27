@@ -8,6 +8,7 @@ import 'landing_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -19,10 +20,8 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   );
   bool _isLoading = false;
 
-  // Ticker for the feature classifier
   late final PageController _featurePageController;
   late final List<_FeatureItem> _features;
-  int _currentFeaturePage = 0;
 
   @override
   void initState() {
@@ -34,20 +33,20 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       _FeatureItem(icon: Icons.explore_outlined, label: "Explore Campus", sub: "Eateries & destinations nearby"),
       _FeatureItem(icon: Icons.campaign_outlined, label: "Post Requests", sub: "Can't find it? Post a request"),
     ];
-    _featurePageController = PageController(viewportFraction: 0.75);
-    // Auto-scroll every 3 seconds
+    
+    // Start at high index for infinite vertical loop
+    _featurePageController = PageController(viewportFraction: 0.8, initialPage: 1000);
+
+    // Auto-scroll vertically every 3 seconds endlessly
     Future.doWhile(() async {
       await Future.delayed(const Duration(seconds: 3));
       if (!mounted) return false;
-      final next = (_currentFeaturePage + 1) % _features.length;
       if (_featurePageController.hasClients) {
-        _featurePageController.animateToPage(
-          next,
-          duration: const Duration(milliseconds: 500),
+        _featurePageController.nextPage(
+          duration: const Duration(milliseconds: 600),
           curve: Curves.easeInOut,
         );
       }
-      if (mounted) setState(() => _currentFeaturePage = next);
       return mounted;
     });
   }
@@ -63,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
         return;
       }
 
@@ -76,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
           content: Text("Access Denied: Please use your BITS Pilani Hyderabad Email ID."),
           backgroundColor: Colors.red,
         ));
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
         return;
       }
 
@@ -129,18 +128,18 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       backgroundColor: const Color(0xFF000000),
       body: Stack(
         children: [
-          // Ambient glow
+          // Ambient radial glow background
           Positioned(
-            top: -100,
-            left: MediaQuery.of(context).size.width / 2 - 150,
+            top: -80,
+            left: MediaQuery.of(context).size.width / 2 - 160,
             child: Container(
-              width: 300,
-              height: 300,
+              width: 320,
+              height: 320,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    Colors.white.withValues(alpha: 0.06),
+                    Colors.white.withValues(alpha: 0.07),
                     Colors.transparent,
                   ],
                 ),
@@ -153,61 +152,90 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // ── NEW LOGO ──
+                  const SizedBox(height: 20),
+
+                  // ── BIGGER RENTX LOGO ──
                   Image.asset(
                     'assets/images/rentx_logo_new.png',
-                    height: 150,
+                    height: 180,
                     fit: BoxFit.contain,
-                    errorBuilder: (e, s, t) => const Icon(Icons.bolt, size: 100, color: Colors.white),
+                    errorBuilder: (e, s, t) => const Icon(Icons.bolt, size: 120, color: Colors.white),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // ── BITS PILANI HYDERABAD CAMPUS MARKETPLACE TEXT ──
+                  const Text(
+                    "BITS PILANI HYDERABAD CAMPUS MARKETPLACE",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xFF71717A),
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.4,
+                    ),
                   ),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 36),
 
-                  // ── RUNNING FEATURES CLASSIFIER (vertical swipe) ──
+                  // ── INFINITE VERTICAL CLASSIFIED CARDS (NO PROGRESS BAR) ──
                   SizedBox(
-                    height: 90,
+                    height: 96,
                     child: PageView.builder(
                       controller: _featurePageController,
                       scrollDirection: Axis.vertical,
-                      itemCount: _features.length,
-                      onPageChanged: (i) => setState(() => _currentFeaturePage = i),
+                      itemCount: 10000, // Infinite scroll loop
                       itemBuilder: (context, index) {
-                        final f = _features[index];
-                        final bool active = index == _currentFeaturePage;
-                        return AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          margin: const EdgeInsets.symmetric(horizontal: 6),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        final f = _features[index % _features.length];
+                        return Container(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                           decoration: BoxDecoration(
-                            color: active ? const Color(0xFF09090B) : const Color(0xFF09090B).withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(
-                              color: active ? const Color(0xFF52525B) : const Color(0xFF27272A),
-                              width: active ? 1.5 : 1,
-                            ),
+                            color: const Color(0xFF09090B),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: const Color(0xFF27272A)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.4),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
                           ),
                           child: Row(
                             children: [
                               Container(
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: active ? 0.1 : 0.04),
-                                  borderRadius: BorderRadius.circular(12),
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(14),
                                 ),
-                                child: Icon(f.icon, color: active ? Colors.white : const Color(0xFF71717A), size: 20),
+                                child: Icon(f.icon, color: Colors.white, size: 22),
                               ),
-                              const SizedBox(width: 12),
+                              const SizedBox(width: 14),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text(f.label, style: TextStyle(color: active ? Colors.white : const Color(0xFF71717A), fontWeight: FontWeight.bold, fontSize: 14)),
+                                    Text(
+                                      f.label,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                      ),
+                                    ),
                                     const SizedBox(height: 3),
-                                    Text(f.sub, style: const TextStyle(color: Color(0xFF71717A), fontSize: 11)),
+                                    Text(
+                                      f.sub,
+                                      style: const TextStyle(color: Color(0xFF71717A), fontSize: 11),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ],
                                 ),
                               ),
+                              const Icon(Icons.keyboard_arrow_down, color: Color(0xFF3F3F46), size: 18),
                             ],
                           ),
                         );
@@ -215,23 +243,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                     ),
                   ),
 
-                  // Page dots
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(_features.length, (i) => AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      width: i == _currentFeaturePage ? 16 : 5,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: i == _currentFeaturePage ? Colors.white : const Color(0xFF3F3F46),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    )),
-                  ),
-
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 44),
 
                   // ── SIGN IN BUTTON ──
                   _isLoading
@@ -260,6 +272,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                             elevation: 0,
                           ),
                         ),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),

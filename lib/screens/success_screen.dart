@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'landing_screen.dart';
 
 enum SuccessType { cycleRental, itemRental, purchase }
 
@@ -14,6 +16,9 @@ class SuccessScreen extends StatefulWidget {
   final String? endTime;
   final double? totalCost;
   final String? whatsappMessage;
+  final String? bookingId;
+  final String? cycleId;
+  final Map<String, dynamic>? cycleData;
 
   const SuccessScreen({
     super.key,
@@ -25,6 +30,9 @@ class SuccessScreen extends StatefulWidget {
     this.endTime,
     this.totalCost,
     this.whatsappMessage,
+    this.bookingId,
+    this.cycleId,
+    this.cycleData,
   });
 
   @override
@@ -39,6 +47,9 @@ class _SuccessScreenState extends State<SuccessScreen> with TickerProviderStateM
 
   int _countdown = 5;
   Timer? _timer;
+  bool _hasRedirected = false;
+  bool _isStartingRide = false;
+  bool _rideStarted = false;
 
   String get _typeLabel {
     switch (widget.type) {
@@ -80,13 +91,12 @@ class _SuccessScreenState extends State<SuccessScreen> with TickerProviderStateM
     );
     _fadeAnim = CurvedAnimation(parent: _fadeController, curve: Curves.easeIn);
 
-    // Sequence: check pops in, then details fade in
     _checkController.forward();
     Future.delayed(const Duration(milliseconds: 600), () {
       if (mounted) _fadeController.forward();
     });
 
-    // Start countdown for WhatsApp redirect
+    // Start 5 second countdown for WhatsApp redirect
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) { t.cancel(); return; }
       if (_countdown <= 1) {
@@ -126,19 +136,59 @@ class _SuccessScreenState extends State<SuccessScreen> with TickerProviderStateM
   }
 
   Future<void> _openWhatsApp() async {
+    _timer?.cancel();
+    if (mounted) setState(() => _hasRedirected = true);
+
     String phone = widget.ownerPhone.replaceAll(RegExp(r'[^0-9]'), '');
     if (!phone.startsWith('91') && phone.length == 10) phone = '91$phone';
-    if (phone.isEmpty) { _close(); return; }
+    if (phone.isEmpty) return;
+
     final msg = _buildWhatsappMessage();
     final uri = Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(msg)}');
     try {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (_) {}
-    if (mounted) _close();
+    // Screen remains active — no Navigator.pop()!
   }
 
-  void _close() {
-    if (mounted) Navigator.of(context).pop();
+  Future<void> _startRideNow() async {
+    if (widget.bookingId == null || widget.bookingId!.isEmpty) {
+      _goToHome();
+      return;
+    }
+
+    setState(() => _isStartingRide = true);
+
+    try {
+      await FirebaseFirestore.instance.collection('bookings').doc(widget.bookingId).update({
+        'status': 'started',
+        'startTime': FieldValue.serverTimestamp(),
+      });
+
+      if (mounted) {
+        setState(() {
+          _isStartingRide = false;
+          _rideStarted = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Ride Started! Safe riding."), backgroundColor: Color(0xFF16A34A)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isStartingRide = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to start ride: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  void _goToHome() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => LandingScreen()),
+      (route) => false,
+    );
   }
 
   @override
@@ -156,22 +206,27 @@ class _SuccessScreenState extends State<SuccessScreen> with TickerProviderStateM
               ScaleTransition(
                 scale: _scaleAnim,
                 child: Container(
-                  width: 120,
-                  height: 120,
+                  width: 110,
+                  height: 110,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: const Color(0xFF16A34A).withValues(alpha: 0.12),
-                    border: Border.all(color: const Color(0xFF22C55E), width: 2),
+                    color: _rideStarted
+                        ? const Color(0xFF38BDF8).withValues(alpha: 0.15)
+                        : const Color(0xFF16A34A).withValues(alpha: 0.12),
+                    border: Border.all(
+                      color: _rideStarted ? const Color(0xFF38BDF8) : const Color(0xFF22C55E),
+                      width: 2,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.check_rounded,
-                    color: Color(0xFF22C55E),
-                    size: 64,
+                  child: Icon(
+                    _rideStarted ? Icons.directions_bike_rounded : Icons.check_rounded,
+                    color: _rideStarted ? const Color(0xFF38BDF8) : const Color(0xFF22C55E),
+                    size: 58,
                   ),
                 ),
               ),
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
 
               // ── SUCCESS HEADING ──
               FadeTransition(
@@ -179,35 +234,37 @@ class _SuccessScreenState extends State<SuccessScreen> with TickerProviderStateM
                 child: Column(
                   children: [
                     Text(
-                      '$_typeLabel Confirmed!',
+                      _rideStarted ? 'Ride Active!' : '$_typeLabel Confirmed!',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.plusJakartaSans(
                         textStyle: const TextStyle(
                           color: Color(0xFFFAFAFA),
-                          fontSize: 26,
+                          fontSize: 24,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.5,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      "We're connecting you with the owner.",
+                    const SizedBox(height: 6),
+                    Text(
+                      _rideStarted
+                          ? "Your timer is now running. Enjoy your ride!"
+                          : "We're connecting you with the owner.",
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Color(0xFF71717A), fontSize: 14),
+                      style: const TextStyle(color: Color(0xFF71717A), fontSize: 13),
                     ),
                   ],
                 ),
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
 
               // ── DETAILS CARD ──
               FadeTransition(
                 opacity: _fadeAnim,
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
                     color: const Color(0xFF09090B),
                     borderRadius: BorderRadius.circular(20),
@@ -233,7 +290,7 @@ class _SuccessScreenState extends State<SuccessScreen> with TickerProviderStateM
                               style: const TextStyle(
                                 color: Color(0xFFFAFAFA),
                                 fontWeight: FontWeight.bold,
-                                fontSize: 16,
+                                fontSize: 15,
                               ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
@@ -241,20 +298,20 @@ class _SuccessScreenState extends State<SuccessScreen> with TickerProviderStateM
                           ),
                         ],
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 16),
                       const Divider(color: Color(0xFF27272A)),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 12),
                       _detailRow('Owner', widget.ownerName),
                       if (widget.startTime != null) ...[
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 8),
                         _detailRow('From', widget.startTime!),
                       ],
                       if (widget.endTime != null) ...[
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 8),
                         _detailRow('Until', widget.endTime!),
                       ],
                       if (widget.totalCost != null) ...[
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 8),
                         _detailRow(
                           widget.type == SuccessType.purchase ? 'Price' : 'Est. Cost',
                           '₹${widget.totalCost!.toStringAsFixed(0)}',
@@ -268,11 +325,12 @@ class _SuccessScreenState extends State<SuccessScreen> with TickerProviderStateM
 
               const Spacer(),
 
-              // ── COUNTDOWN + WHATSAPP BUTTON ──
+              // ── ACTION CONTROLS ──
               FadeTransition(
                 opacity: _fadeAnim,
                 child: Column(
                   children: [
+                    // WhatsApp Status Banner
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       decoration: BoxDecoration(
@@ -283,48 +341,86 @@ class _SuccessScreenState extends State<SuccessScreen> with TickerProviderStateM
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.timer_outlined, color: Color(0xFF71717A), size: 16),
+                          Icon(
+                            _hasRedirected ? Icons.chat_bubble_outline : Icons.timer_outlined,
+                            color: _hasRedirected ? const Color(0xFF22C55E) : const Color(0xFF71717A),
+                            size: 15,
+                          ),
                           const SizedBox(width: 8),
                           Text(
-                            'Redirecting to WhatsApp in $_countdown...',
-                            style: const TextStyle(color: Color(0xFF71717A), fontSize: 13),
+                            _hasRedirected
+                                ? 'Opened WhatsApp'
+                                : 'Redirecting to WhatsApp in $_countdown...',
+                            style: TextStyle(
+                              color: _hasRedirected ? const Color(0xFF22C55E) : const Color(0xFF71717A),
+                              fontSize: 12,
+                              fontWeight: _hasRedirected ? FontWeight.bold : FontWeight.normal,
+                            ),
                           ),
                         ],
                       ),
                     ),
+
                     const SizedBox(height: 14),
+
+                    // Primary WhatsApp Button
                     ElevatedButton.icon(
-                      onPressed: () {
-                        _timer?.cancel();
-                        _openWhatsApp();
-                      },
-                      icon: const Icon(Icons.open_in_new, color: Colors.black, size: 20),
-                      label: const Text(
-                        'Open WhatsApp Now',
-                        style: TextStyle(
+                      onPressed: _openWhatsApp,
+                      icon: const Icon(Icons.open_in_new, color: Colors.black, size: 18),
+                      label: Text(
+                        _hasRedirected ? 'Re-open WhatsApp' : 'Open WhatsApp Now',
+                        style: const TextStyle(
                           color: Colors.black,
-                          fontSize: 15,
+                          fontSize: 14,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF22C55E),
-                        minimumSize: const Size(double.infinity, 54),
+                        minimumSize: const Size(double.infinity, 50),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         elevation: 0,
                       ),
                     ),
+
                     const SizedBox(height: 10),
-                    TextButton(
-                      onPressed: () {
-                        _timer?.cancel();
-                        _close();
-                      },
-                      child: const Text(
-                        'Skip for now',
-                        style: TextStyle(color: Color(0xFF52525B), fontSize: 13),
+
+                    // Start Ride Button (for cycle rentals)
+                    if (widget.type == SuccessType.cycleRental && !_rideStarted) ...[
+                      ElevatedButton.icon(
+                        onPressed: _isStartingRide ? null : _startRideNow,
+                        icon: _isStartingRide
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Icon(Icons.play_circle_fill, color: Colors.white, size: 20),
+                        label: Text(
+                          _isStartingRide ? "Starting Ride..." : "START RIDE NOW",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0284C7),
+                          minimumSize: const Size(double.infinity, 50),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          elevation: 0,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+
+                    // Back to Home Button
+                    TextButton.icon(
+                      onPressed: _goToHome,
+                      icon: const Icon(Icons.home_outlined, color: Color(0xFFA1A1AA), size: 18),
+                      label: const Text(
+                        'Back to Campus Home',
+                        style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 13, fontWeight: FontWeight.w600),
                       ),
                     ),
+
                     const SizedBox(height: 16),
                   ],
                 ),

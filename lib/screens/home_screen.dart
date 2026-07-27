@@ -676,8 +676,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 backgroundColor: buttonColor,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
               ),
-              onPressed: () {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => CycleDetailScreen(data: data, cycleId: cycleId)));
+              onPressed: () async {
+                if (status == 'booked') {
+                  try {
+                    await FirebaseFirestore.instance.collection('bookings').doc(booking.id).update({
+                      'status': 'started',
+                      'startTime': FieldValue.serverTimestamp(),
+                    });
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Ride Started! Safe riding."), backgroundColor: kSurface1),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Error starting ride: $e"), backgroundColor: Colors.redAccent),
+                      );
+                    }
+                  }
+                } else {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => CycleDetailScreen(data: data, cycleId: cycleId)));
+                }
               },
               child: Text(
                 buttonText, 

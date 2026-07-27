@@ -80,61 +80,69 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
   Future<void> _checkActiveBooking() async {
     if (currentUser == null) return;
     
-    var query = await FirebaseFirestore.instance
-        .collection('bookings')
-        .where('userId', isEqualTo: currentUser!.uid)
-        .where('cycleId', isEqualTo: widget.cycleId)
-        .where('status', whereIn: ['booked', 'started', 'payment_pending'])
-        .get();
+    try {
+      var query = await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('userId', isEqualTo: currentUser!.uid)
+          .get();
 
-    if (query.docs.isNotEmpty) {
-      var doc = query.docs.first;
-      var data = doc.data();
-      String status = data['status'];
-      bool isNoShowDoc = data['isNoShow'] ?? false;
-      
-      DateTime? startTimeStamp;
-      DateTime? scheduledStartX;
-      DateTime? scheduledEndX;
-      
-      if (data['startTime'] != null) startTimeStamp = (data['startTime'] as Timestamp).toDate();
-      if (data.containsKey('scheduledStartTime')) {
-          scheduledStartX = (data['scheduledStartTime'] as Timestamp).toDate();
-      }
-      if (data.containsKey('scheduledEndTime')) {
-          scheduledEndX = (data['scheduledEndTime'] as Timestamp).toDate();
-      }
+      var activeDocs = query.docs.where((doc) {
+        var d = doc.data();
+        return d['cycleId'] == widget.cycleId &&
+            ['booked', 'started', 'payment_pending'].contains(d['status']);
+      }).toList();
 
-      if (status == 'booked' && scheduledEndX != null && DateTime.now().isAfter(scheduledEndX)) {
-          await FirebaseFirestore.instance.collection('bookings').doc(doc.id).update({
-            'status': 'no_show',
-            'isNoShow': true,
-          });
+      if (activeDocs.isNotEmpty) {
+        var doc = activeDocs.first;
+        var data = doc.data();
+        String status = data['status'];
+        bool isNoShowDoc = data['isNoShow'] ?? false;
+        
+        DateTime? startTimeStamp;
+        DateTime? scheduledStartX;
+        DateTime? scheduledEndX;
+        
+        if (data['startTime'] != null) startTimeStamp = (data['startTime'] as Timestamp).toDate();
+        if (data.containsKey('scheduledStartTime')) {
+            scheduledStartX = (data['scheduledStartTime'] as Timestamp).toDate();
+        }
+        if (data.containsKey('scheduledEndTime')) {
+            scheduledEndX = (data['scheduledEndTime'] as Timestamp).toDate();
+        }
 
-          if (mounted) {
-            setState(() {
-              _bookingId = doc.id;
-              _bookingStatus = 'no_show';
-              _isNoShow = true;
+        if (status == 'booked' && scheduledEndX != null && DateTime.now().isAfter(scheduledEndX)) {
+            await FirebaseFirestore.instance.collection('bookings').doc(doc.id).update({
+              'status': 'no_show',
+              'isNoShow': true,
             });
-          }
-          return;
-      }
 
-      if (mounted) {
-        setState(() {
-          _bookingId = doc.id;
-          _bookingStatus = status;
-          _rideStartTime = startTimeStamp;
-          _scheduledStartTime = scheduledStartX;
-          _scheduledEndTime = scheduledEndX;
-          _isNoShow = isNoShowDoc;
+            if (mounted) {
+              setState(() {
+                _bookingId = doc.id;
+                _bookingStatus = 'no_show';
+                _isNoShow = true;
+              });
+            }
+            return;
+        }
 
-          if (scheduledStartX != null) _startTime = scheduledStartX;
-          if (scheduledEndX != null) _endTime = scheduledEndX;
-          _calculateCost();
-        });
+        if (mounted) {
+          setState(() {
+            _bookingId = doc.id;
+            _bookingStatus = status;
+            _rideStartTime = startTimeStamp;
+            _scheduledStartTime = scheduledStartX;
+            _scheduledEndTime = scheduledEndX;
+            _isNoShow = isNoShowDoc;
+
+            if (scheduledStartX != null) _startTime = scheduledStartX;
+            if (scheduledEndX != null) _endTime = scheduledEndX;
+            _calculateCost();
+          });
+        }
       }
+    } catch (e) {
+      debugPrint("Error checking active booking: $e");
     }
   }
 
@@ -238,6 +246,9 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
               endTime: endTimeStr,
               totalCost: _totalCost,
               whatsappMessage: message,
+              bookingId: ref.id,
+              cycleId: widget.cycleId,
+              cycleData: widget.data,
             ),
           ),
         );
@@ -245,6 +256,85 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Booking failed: $e"), backgroundColor: Colors.redAccent));
     }
+  }
+
+  Future<void> _startRide() async {
+    if (_bookingId == null) return;
+    try {
+      await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({
+        'status': 'started',
+        'startTime': FieldValue.serverTimestamp(),
+      });
+      if (mounted) {
+        setState(() {
+          _bookingStatus = 'started';
+          _rideStartTime = DateTime.now();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Ride Started! Safe riding."), backgroundColor: kSurface1),
+        );
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to start ride: $e"), backgroundColor: Colors.redAccent));
+    }
+  }
+
+  Future<void> _endRide() async {
+    if (_bookingId == null) return;
+    try {
+      await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({
+        'status': 'payment_pending',
+        'endTime': FieldValue.serverTimestamp(),
+        'finalCost': _totalCost,
+      });
+      if (mounted) {
+        setState(() => _bookingStatus = 'payment_pending');
+        _showPaymentDialog();
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to end ride: $e"), backgroundColor: Colors.redAccent));
+    }
+  }
+
+  void _showPaymentDialog() {
+    String upi = widget.data['ownerUpiId'] ?? widget.data['upiId'] ?? 'N/A';
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: kSurface1,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: kBorder)),
+        title: const Text("Payment Details", style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Total Amount: ₹${_totalCost.toStringAsFixed(0)}", style: const TextStyle(color: kTextPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            const Text("Owner UPI ID:", style: TextStyle(color: kTextMuted, fontSize: 12)),
+            SelectableText(upi, style: const TextStyle(color: kAccentCyan, fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            const Text("Please send payment via GPay/PhonePe/Paytm to the UPI ID above.", style: TextStyle(color: kTextDim, fontSize: 12)),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: kTextPrimary, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            onPressed: () async {
+              if (_bookingId != null) {
+                await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({'status': 'completed'});
+              }
+              if (mounted) setState(() => _bookingStatus = 'completed');
+              if (mounted) Navigator.pop(context);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Payment Marked Complete! Thank you."), backgroundColor: kSurface1));
+              }
+            },
+            child: const Text("I Have Paid", style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
 
@@ -460,8 +550,14 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
               border: Border(top: BorderSide(color: kBorder)),
             ),
             child: rentXButton(
-              label: _bookingStatus == 'none' ? "BOOK RIDE NOW" : (_bookingStatus == 'booked' ? "START RIDE" : "END RIDE & PAY"),
-              onTap: _bookingStatus == 'none' ? _createBooking : null,
+              label: _bookingStatus == 'none'
+                  ? "BOOK RIDE NOW"
+                  : (_bookingStatus == 'booked' ? "START RIDE NOW" : (_bookingStatus == 'started' ? "END RIDE & PAY" : "PAYMENT PENDING")),
+              onTap: _bookingStatus == 'none'
+                  ? _createBooking
+                  : (_bookingStatus == 'booked'
+                      ? _startRide
+                      : (_bookingStatus == 'started' ? _endRide : (_bookingStatus == 'payment_pending' ? _showPaymentDialog : null))),
               icon: Icons.pedal_bike,
             ),
           ),
