@@ -44,7 +44,28 @@ class _BuyItemDetailScreenState extends State<BuyItemDetailScreen> {
     final itemName = widget.data['itemName'] ?? 'item';
     final price = widget.data['price'] ?? 0;
     final location = widget.data['location'] ?? 'campus';
-    final msg = "Hi ${widget.data['ownerName']}, I'm interested in buying your \"$itemName\" listed for ₹$price on RentX. Can we arrange collection at $location Bhavan?";
+    final msg = "Hi ${widget.data['ownerName']}, I'm interested in buying your \"$itemName\" listed for ₹$price on RentX. Can we arrange collection at $location Bhavan? - ${currentUser?.displayName ?? 'Student'}";
+
+    // Create a purchase booking in Firestore so the seller sees it
+    try {
+      await FirebaseFirestore.instance.collection('bookings').add({
+        'userId': currentUser?.uid,
+        'renterName': currentUser?.displayName ?? 'User',
+        'saleItemId': widget.itemId,
+        'saleItemData': widget.data,
+        'ownerId': widget.data['ownerId'],
+        'ownerName': widget.data['ownerName'] ?? 'Seller',
+        'ownerPhone': phone,
+        'type': 'purchase',
+        'status': 'booked',
+        'itemName': itemName,
+        'price': price,
+        'location': location,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Failed to store purchase booking: $e');
+    }
 
     if (mounted) {
       Navigator.push(

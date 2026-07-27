@@ -209,8 +209,10 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
 
       var ref = await FirebaseFirestore.instance.collection('bookings').add({
         'userId': currentUser!.uid,
+        'renterName': currentUser!.displayName ?? 'User',
         'ownerId': widget.data['ownerId'],
         'cycleId': widget.cycleId,
+        'type': 'cycle',
         'status': 'booked',
         'createdAt': FieldValue.serverTimestamp(),
         'basePrice': widget.data['basePrice'], 

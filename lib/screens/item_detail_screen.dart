@@ -174,6 +174,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
         'itemId': widget.itemId,
         'itemData': widget.data,
         'ownerId': widget.data['ownerId'],
+        'type': 'item',
         'status': 'booked',
         'scheduledStartTime': Timestamp.fromDate(_startTime),
         'scheduledEndTime': Timestamp.fromDate(_endTime),
