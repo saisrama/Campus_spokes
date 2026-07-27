@@ -185,9 +185,10 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    String cycleId = widget.booking['cycleId'];
-    String ownerId = widget.booking['ownerId'];
-    String userId = widget.booking['userId'];
+    Map<String, dynamic> bData = widget.booking;
+    String cycleId = bData['cycleId'] ?? bData['itemId'] ?? '';
+    String ownerId = bData['ownerId'] ?? '';
+    String userId = bData['userId'] ?? '';
     
     // Dynamic Logic: Who is viewing?
     String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
@@ -196,9 +197,9 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     String targetUserId = isOwnerViewing ? userId : ownerId;
     String targetUserLabel = isOwnerViewing ? "Renter Details" : "Owner Details";
     
-    Timestamp? startTime = widget.booking['startTime'];
-    Timestamp? endTime = widget.booking['endTime'];
-    double cost = _finalCost ?? (widget.booking['finalCost'] ?? 0).toDouble();
+    Timestamp? startTime = bData['startTime'];
+    Timestamp? endTime = bData['endTime'];
+    double cost = _finalCost ?? ((bData['finalCost'] ?? 0) as num).toDouble();
 
     return Scaffold(
       appBar: AppBar(title: Text("Ride Details")),

@@ -161,6 +161,12 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     }
 
     try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+      );
+
       var ref = await FirebaseFirestore.instance.collection('bookings').add({
         'userId': currentUser!.uid,
         'renterName': currentUser!.displayName ?? 'User',
@@ -178,19 +184,21 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      setState(() {
-        _bookingId = ref.id;
-        _bookingStatus = 'booked';
-        _scheduledStartTime = _startTime;
-        _scheduledEndTime = _endTime;
-      });
-
       if (mounted) {
+        Navigator.pop(context);
+
+        setState(() {
+          _bookingId = ref.id;
+          _bookingStatus = 'booked';
+          _scheduledStartTime = _startTime;
+          _scheduledEndTime = _endTime;
+        });
+
         final startFmt = DateFormat('MMM d, h:mm a').format(_startTime);
         final endFmt = DateFormat('MMM d, h:mm a').format(_endTime);
         final msg = "Hi ${widget.data['ownerName']}, I have booked your item '${widget.data['itemName']}' on RentX for $startFmt - $endFmt. Please coordinate pick-up at ${widget.data['location']} Bhavan.";
 
-        await Navigator.push(
+        Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => SuccessScreen(
@@ -208,6 +216,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
       }
     } catch (e) {
       if (mounted) {
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Booking Failed: $e"), backgroundColor: Colors.redAccent));
       }
     }
@@ -254,17 +263,18 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   Future<void> _endSession() async {
     if (_bookingId == null) return;
     await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({
-      'status': 'payment_pending',
+      'status': 'completed',
       'endTime': FieldValue.serverTimestamp(),
       'finalCost': _totalCost,
     });
-    setState(() => _bookingStatus = 'payment_pending');
+    setState(() => _bookingStatus = 'completed');
     _showPaymentDialog();
   }
 
   void _showPaymentDialog() {
     String upi = widget.data['ownerUpiId'] ?? 'N/A';
     String ownerName = widget.data['ownerName'] ?? 'Owner';
+    String itemName = widget.data['itemName'] ?? 'Item';
     double amount = _totalCost;
 
     showDialog(
@@ -415,8 +425,26 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
               if (_bookingId != null) {
                 await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({'status': 'completed'});
               }
-              if (mounted) setState(() => _bookingStatus = 'completed');
+              if (mounted) setState(() => _bookingStatus = 'none');
               if (mounted) Navigator.pop(dialogCtx);
+
+              String cleanPhone = (widget.data['ownerPhone'] ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+              if (cleanPhone.isNotEmpty) {
+                if (!cleanPhone.startsWith('91') && cleanPhone.length == 10) {
+                  cleanPhone = '91$cleanPhone';
+                }
+                String msg = "Hi $ownerName, I have completed the payment of ₹${amount.toStringAsFixed(0)} for renting your *$itemName* on RentX.\n\n"
+                    "📋 *Rental Payment Summary:*\n"
+                    "• Item: $itemName\n"
+                    "• Duration: ${_durationInHours.toStringAsFixed(1)} hrs\n"
+                    "• Amount Paid: ₹${amount.toStringAsFixed(0)}\n\n"
+                    "Please verify the payment. Thank you!";
+                final Uri url = Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encodeComponent(msg)}");
+                if (await canLaunchUrl(url)) {
+                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                }
+              }
+
               _showReviewDialog();
             },
             child: const Text("I HAVE COMPLETED PAYMENT", style: TextStyle(fontWeight: FontWeight.bold)),

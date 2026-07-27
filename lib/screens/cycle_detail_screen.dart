@@ -201,6 +201,12 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
 
   Future<void> _createBooking() async {
     try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+      );
+
       var ref = await FirebaseFirestore.instance.collection('bookings').add({
         'userId': currentUser!.uid,
         'ownerId': widget.data['ownerId'],
@@ -220,11 +226,13 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
       _scheduledEndTime = _endTime;
 
       DateTime nextAvailable = _scheduledEndTime!.add(const Duration(minutes: 30));
-      await FirebaseFirestore.instance.collection('cycles').doc(widget.cycleId).update({
+      FirebaseFirestore.instance.collection('cycles').doc(widget.cycleId).update({
         'nextAvailableTime': nextAvailable,
       });
 
       if (mounted) {
+        Navigator.pop(context);
+
         setState(() {
           _bookingId = ref.id;
           _bookingStatus = 'booked';
@@ -236,7 +244,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
             "*Time:* $startTimeStr to $endTimeStr\n"
             "*Estimated Cost:* ₹${_totalCost.toStringAsFixed(0)}\n\nPlease confirm availability.";
 
-        await Navigator.push(
+        Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => SuccessScreen(
@@ -256,7 +264,10 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         );
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Booking failed: $e"), backgroundColor: Colors.redAccent));
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Booking failed: $e"), backgroundColor: Colors.redAccent));
+      }
     }
   }
 
@@ -285,12 +296,12 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
     if (_bookingId == null) return;
     try {
       await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({
-        'status': 'payment_pending',
+        'status': 'completed',
         'endTime': FieldValue.serverTimestamp(),
         'finalCost': _totalCost,
       });
       if (mounted) {
-        setState(() => _bookingStatus = 'payment_pending');
+        setState(() => _bookingStatus = 'completed');
         _showPaymentDialog();
       }
     } catch (e) {
@@ -301,6 +312,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
   void _showPaymentDialog() {
     String upi = widget.data['ownerUpiId'] ?? widget.data['upiId'] ?? 'N/A';
     String ownerName = widget.data['ownerName'] ?? 'Owner';
+    String modelName = widget.data['modelName'] ?? 'Cycle';
     double amount = _totalCost;
 
     showDialog(
@@ -451,8 +463,26 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
               if (_bookingId != null) {
                 await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({'status': 'completed'});
               }
-              if (mounted) setState(() => _bookingStatus = 'completed');
+              if (mounted) setState(() => _bookingStatus = 'none');
               if (mounted) Navigator.pop(dialogCtx);
+
+              String cleanPhone = (widget.data['ownerPhone'] ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+              if (cleanPhone.isNotEmpty) {
+                if (!cleanPhone.startsWith('91') && cleanPhone.length == 10) {
+                  cleanPhone = '91$cleanPhone';
+                }
+                String msg = "Hi $ownerName, I have completed the payment of ₹${amount.toStringAsFixed(0)} for renting your cycle *$modelName* on RentX.\n\n"
+                    "📋 *Rental Payment Summary:*\n"
+                    "• Cycle: $modelName\n"
+                    "• Duration: ${_durationInHours.toStringAsFixed(1)} hrs\n"
+                    "• Amount Paid: ₹${amount.toStringAsFixed(0)}\n\n"
+                    "Please verify the payment. Thank you!";
+                final Uri url = Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encodeComponent(msg)}");
+                if (await canLaunchUrl(url)) {
+                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                }
+              }
+
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("Payment Marked Complete! Thank you."), backgroundColor: kSurface1),

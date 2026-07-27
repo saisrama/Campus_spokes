@@ -570,6 +570,111 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
     }
   }
 
+  Widget _buildActiveItemRentalCard(BuildContext context, DocumentSnapshot booking) {
+    Map<String, dynamic> bData = (booking.data() as Map<String, dynamic>?) ?? {};
+    Map<String, dynamic> data = (bData['itemData'] as Map<String, dynamic>?) ?? {};
+    String status = bData['status'] ?? 'booked';
+    String itemId = bData['itemId'] ?? '';
+
+    String displayStatus = status.toUpperCase();
+    Color statusColor = Colors.amber;
+    String buttonText = "START SESSION";
+    Color buttonColor = Colors.green;
+
+    if (status == 'started') {
+      statusColor = Colors.green;
+      buttonText = "END SESSION & PAY";
+      buttonColor = Colors.red;
+    } else if (status == 'payment_pending') {
+      statusColor = Colors.green;
+      buttonText = "PAY NOW";
+      buttonColor = Colors.green;
+    }
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0xFF2C2C3E), Color(0xFF1E1E2E)]),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: statusColor, width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("ACTIVE ITEM RENTAL", style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8)),
+                child: Text(displayStatus, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
+              )
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: _buildImage(data['imageUrl'] ?? (data['imageUrls'] is List && (data['imageUrls'] as List).isNotEmpty ? data['imageUrls'][0] : ''), width: 60, height: 60),
+              ),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(data['itemName'] ?? 'Item', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text("Collect: ${data['location'] ?? 'Campus'} Bhavan", style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                  ],
+                ),
+              )
+            ],
+          ),
+          const SizedBox(height: 15),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: buttonColor,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () async {
+                if (status == 'booked') {
+                  try {
+                    await FirebaseFirestore.instance.collection('bookings').doc(booking.id).update({
+                      'status': 'started',
+                      'startTime': FieldValue.serverTimestamp(),
+                    });
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Rental Session Started!"), backgroundColor: Color(0xFF18181B)),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Error starting session: $e"), backgroundColor: Colors.redAccent),
+                      );
+                    }
+                  }
+                } else {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => ItemDetailScreen(data: data, itemId: itemId)));
+                }
+              },
+              child: Text(
+                buttonText, 
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
   Widget _buildItemCard(BuildContext context, Map<String, dynamic> data, String itemId, {double? totalPrice}) {
     String itemName = data['itemName'] ?? 'Item';
     String itemType = data['itemType'] ?? 'General';
@@ -708,85 +813,117 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
         ],
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('items').snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) return const Center(child: Text("Error loading items", style: TextStyle(color: Colors.white)));
-          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Colors.indigoAccent));
-
-          var docs = snapshot.data!.docs;
-
-          // Exclude own items
-          if (user != null) {
-            docs = docs.where((d) {
-              var data = d.data() as Map<String, dynamic>;
-              return data['ownerId'] != user!.uid;
+        stream: FirebaseFirestore.instance
+            .collection('bookings')
+            .where('userId', isEqualTo: user?.uid)
+            .where('status', whereIn: ['booked', 'started', 'payment_pending'])
+            .snapshots(),
+        builder: (context, bookingSnapshot) {
+          DocumentSnapshot? activeBooking;
+          if (bookingSnapshot.hasData && bookingSnapshot.data!.docs.isNotEmpty) {
+            final itemBookings = bookingSnapshot.data!.docs.where((d) {
+              final map = d.data() as Map<String, dynamic>;
+              return map.containsKey('itemId');
             }).toList();
+            if (itemBookings.isNotEmpty) {
+              activeBooking = itemBookings.first;
+            }
           }
 
-          // Exclude disabled items
-          docs = docs.where((d) {
-            var data = d.data() as Map<String, dynamic>;
-            return data['ownerDisabled'] != true;
-          }).toList();
+          return StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('items').snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) return const Center(child: Text("Error loading items", style: TextStyle(color: Colors.white)));
+              if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Colors.indigoAccent));
 
-          // Category filter
-          if (_selectedCategories.isNotEmpty) {
-            docs = docs.where((d) {
-              var data = d.data() as Map<String, dynamic>;
-              return _selectedCategories.contains(data['itemType']);
-            }).toList();
-          }
+              var docs = snapshot.data!.docs;
 
-          // Location filter
-          if (_selectedLocations.isNotEmpty) {
-            docs = docs.where((d) {
-              var data = d.data() as Map<String, dynamic>;
-              return _selectedLocations.contains(data['location']);
-            }).toList();
-          }
+              // Filter out active item from available items
+              if (activeBooking != null) {
+                final abMap = activeBooking.data() as Map<String, dynamic>?;
+                if (abMap != null && abMap.containsKey('itemId')) {
+                  docs = docs.where((d) => d.id != abMap['itemId']).toList();
+                }
+              }
 
-          // Search filter
-          if (_searchQuery.isNotEmpty) {
-            docs = docs.where((d) {
-              var data = d.data() as Map<String, dynamic>;
-              final name = (data['itemName'] ?? '').toLowerCase();
-              final type = (data['itemType'] ?? '').toLowerCase();
-              final desc = (data['description'] ?? '').toLowerCase();
-              return name.contains(_searchQuery) || type.contains(_searchQuery) || desc.contains(_searchQuery);
-            }).toList();
-          }
+              // Exclude own items
+              if (user != null) {
+                docs = docs.where((d) {
+                  var data = d.data() as Map<String, dynamic>;
+                  return data['ownerId'] != user!.uid;
+                }).toList();
+              }
 
-          // Sort
-          if (_sortBy == 'price_asc') {
-            docs.sort((a, b) {
-              final ad = a.data() as Map<String, dynamic>;
-              final bd = b.data() as Map<String, dynamic>;
-              return (ad['basePrice'] ?? 0).compareTo(bd['basePrice'] ?? 0);
-            });
-          } else if (_sortBy == 'price_desc') {
-            docs.sort((a, b) {
-              final ad = a.data() as Map<String, dynamic>;
-              final bd = b.data() as Map<String, dynamic>;
-              return (bd['basePrice'] ?? 0).compareTo(ad['basePrice'] ?? 0);
-            });
-          } else if (_sortBy == 'newest') {
-            docs.sort((a, b) {
-              final ad = a.data() as Map<String, dynamic>;
-              final bd = b.data() as Map<String, dynamic>;
-              final at = ad['createdAt'];
-              final bt = bd['createdAt'];
-              if (at == null || bt == null) return 0;
-              return (bt as dynamic).compareTo(at as dynamic);
-            });
-          }
+              // Exclude disabled items
+              docs = docs.where((d) {
+                var data = d.data() as Map<String, dynamic>;
+                return data['ownerDisabled'] != true;
+              }).toList();
 
-          return CustomScrollView(
-            slivers: [
-              // Time Slot Filter
-              SliverToBoxAdapter(child: _buildTimeFilter()),
+              // Category filter
+              if (_selectedCategories.isNotEmpty) {
+                docs = docs.where((d) {
+                  var data = d.data() as Map<String, dynamic>;
+                  return _selectedCategories.contains(data['itemType']);
+                }).toList();
+              }
 
-              // Search + Filter/Sort row
-              SliverToBoxAdapter(child: _buildSearchAndFilterBar()),
+              // Location filter
+              if (_selectedLocations.isNotEmpty) {
+                docs = docs.where((d) {
+                  var data = d.data() as Map<String, dynamic>;
+                  return _selectedLocations.contains(data['location']);
+                }).toList();
+              }
+
+              // Search filter
+              if (_searchQuery.isNotEmpty) {
+                docs = docs.where((d) {
+                  var data = d.data() as Map<String, dynamic>;
+                  final name = (data['itemName'] ?? '').toLowerCase();
+                  final type = (data['itemType'] ?? '').toLowerCase();
+                  final desc = (data['description'] ?? '').toLowerCase();
+                  return name.contains(_searchQuery) || type.contains(_searchQuery) || desc.contains(_searchQuery);
+                }).toList();
+              }
+
+              // Sort
+              if (_sortBy == 'price_asc') {
+                docs.sort((a, b) {
+                  final ad = a.data() as Map<String, dynamic>;
+                  final bd = b.data() as Map<String, dynamic>;
+                  return (ad['basePrice'] ?? 0).compareTo(bd['basePrice'] ?? 0);
+                });
+              } else if (_sortBy == 'price_desc') {
+                docs.sort((a, b) {
+                  final ad = a.data() as Map<String, dynamic>;
+                  final bd = b.data() as Map<String, dynamic>;
+                  return (bd['basePrice'] ?? 0).compareTo(ad['basePrice'] ?? 0);
+                });
+              } else if (_sortBy == 'newest') {
+                docs.sort((a, b) {
+                  final ad = a.data() as Map<String, dynamic>;
+                  final bd = b.data() as Map<String, dynamic>;
+                  final at = ad['createdAt'];
+                  final bt = bd['createdAt'];
+                  if (at == null || bt == null) return 0;
+                  return (bt as dynamic).compareTo(at as dynamic);
+                });
+              }
+
+              return CustomScrollView(
+                slivers: [
+                  // Active Item Rental Banner
+                  if (activeBooking != null)
+                    SliverToBoxAdapter(
+                      child: _buildActiveItemRentalCard(context, activeBooking),
+                    ),
+
+                  // Time Slot Filter
+                  SliverToBoxAdapter(child: _buildTimeFilter()),
+
+                  // Search + Filter/Sort row
+                  SliverToBoxAdapter(child: _buildSearchAndFilterBar()),
 
               // Active filter pills
               SliverToBoxAdapter(child: _buildActiveFilterPills()),
@@ -860,7 +997,9 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
             ],
           );
         },
-      ),
+      );
+    },
+  ),
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

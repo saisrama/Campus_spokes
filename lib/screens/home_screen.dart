@@ -11,6 +11,7 @@ import 'dart:async';
 import 'add_cycle_screen.dart';
 import '../services/notification_service.dart';
 import 'cycle_detail_screen.dart';
+import 'item_detail_screen.dart';
 import 'profile_screen.dart';
 import 'profile_setup_screen.dart';
 import '../theme/app_theme.dart'; // Added import
@@ -273,7 +274,13 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context, bookingSnapshot) {
           DocumentSnapshot? activeBooking;
           if (bookingSnapshot.hasData && bookingSnapshot.data!.docs.isNotEmpty) {
-            activeBooking = bookingSnapshot.data!.docs.first;
+            final cycleBookings = bookingSnapshot.data!.docs.where((d) {
+              final map = d.data() as Map<String, dynamic>;
+              return map.containsKey('cycleId');
+            }).toList();
+            if (cycleBookings.isNotEmpty) {
+              activeBooking = cycleBookings.first;
+            }
           }
 
           return StreamBuilder<QuerySnapshot>(
@@ -294,7 +301,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
               // 2. Active Ride Excl
               if (activeBooking != null) {
-                 docs = docs.where((d) => d.id != activeBooking!['cycleId']).toList();
+                 final abMap = activeBooking.data() as Map<String, dynamic>?;
+                 if (abMap != null && abMap.containsKey('cycleId')) {
+                   docs = docs.where((d) => d.id != abMap['cycleId']).toList();
+                 }
               }
 
               // 3. Own Cycles Excl
@@ -598,20 +608,22 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildActiveRideCard(BuildContext context, DocumentSnapshot booking) {
-    Map<String, dynamic> data = booking['cycleData'];
-    String status = booking['status'];
-    String cycleId = booking['cycleId'];
-    bool isNoShow = booking.data().toString().contains('isNoShow') ? (booking['isNoShow'] ?? false) : false;
+    Map<String, dynamic> bData = (booking.data() as Map<String, dynamic>?) ?? {};
+    Map<String, dynamic> data = (bData['cycleData'] ?? bData['itemData'] ?? {}) as Map<String, dynamic>;
+    String status = bData['status'] ?? 'booked';
+    String targetId = bData['cycleId'] ?? bData['itemId'] ?? '';
+    bool isItemBooking = bData.containsKey('itemId');
+    bool isNoShow = bData.containsKey('isNoShow') ? (bData['isNoShow'] ?? false) : false;
 
     // Determine Display Status and Color
     String displayStatus = status.toUpperCase();
     Color statusColor = Colors.amber;
-    String buttonText = "START RIDE";
+    String buttonText = isItemBooking ? "VIEW RENTAL DETAILS" : "START RIDE";
     Color buttonColor = Colors.green;
     
     if (status == 'started') {
       statusColor = Colors.green;
-      buttonText = "END RIDE";
+      buttonText = isItemBooking ? "END RENTAL & PAY" : "END RIDE";
       buttonColor = Colors.red;
     } else if (status == 'payment_pending') {
       statusColor = Colors.green;
@@ -641,7 +653,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("ACTIVE RIDE", style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+              Text(isItemBooking ? "ACTIVE RENTAL" : "ACTIVE RIDE", style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
               Container(
                 padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8)),
@@ -654,15 +666,15 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: _buildImage(data['imageUrl'], width: 60, height: 60),
+                child: _buildImage(data['imageUrl'] ?? (data['imageUrls'] is List && (data['imageUrls'] as List).isNotEmpty ? data['imageUrls'][0] : ''), width: 60, height: 60),
               ),
               SizedBox(width: 15),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(data['modelName'], style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    Text(data['location'], style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    Text(data['modelName'] ?? data['itemName'] ?? 'Item', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text(data['location'] ?? 'Campus', style: TextStyle(color: Colors.grey, fontSize: 12)),
                   ],
                 ),
               )
@@ -677,7 +689,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
               ),
               onPressed: () async {
-                if (status == 'booked') {
+                if (status == 'booked' && !isItemBooking) {
                   try {
                     await FirebaseFirestore.instance.collection('bookings').doc(booking.id).update({
                       'status': 'started',
@@ -696,7 +708,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
                   }
                 } else {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => CycleDetailScreen(data: data, cycleId: cycleId)));
+                  if (isItemBooking) {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => ItemDetailScreen(data: data, itemId: targetId)));
+                  } else {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => CycleDetailScreen(data: data, cycleId: targetId)));
+                  }
                 }
               },
               child: Text(
@@ -708,7 +724,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
-    }
+  }
 
   Widget _buildTimeFilter() {
     return Container(

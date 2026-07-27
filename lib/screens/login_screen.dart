@@ -176,10 +176,12 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
 
                     const SizedBox(height: 28),
 
-                    // ── INFINITE VERTICAL CLASSIFIED CARDS (NO OVERFLOW) ──
-                    SizedBox(
-                      height: 76,
-                      child: PageView.builder(
+                    // ── INFINITE VERTICAL CLASSIFIED CARDS (NARROWER THAN BUTTON) ──
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: SizedBox(
+                        height: 90,
+                        child: PageView.builder(
                         controller: _featurePageController,
                         scrollDirection: Axis.vertical,
                         itemCount: 10000,
@@ -227,13 +229,13 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                     ],
                                   ),
                                 ),
-                                const Icon(Icons.keyboard_arrow_down, color: Color(0xFF3F3F46), size: 16),
                               ],
                             ),
                           );
                         },
                       ),
                     ),
+                  ),
 
                     const SizedBox(height: 32),
 
