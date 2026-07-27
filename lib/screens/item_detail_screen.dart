@@ -272,12 +272,6 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     _showPaymentDialog();
   }
 
-  void _cancelBooking() {
-    if (_bookingId == null) return;
-    double cancelAmount = _totalCost * 0.5;
-    _showPaymentDialog(isCancellation: true, cancelAmount: cancelAmount);
-  }
-
   void _showPaymentDialog({bool isCancellation = false, double? cancelAmount}) {
     String upi = widget.data['ownerUpiId'] ?? widget.data['upiId'] ?? 'N/A';
     String ownerName = widget.data['ownerName'] ?? 'Owner';
@@ -1020,12 +1014,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
       });
       if (mounted) {
         setState(() => _bookingStatus = 'cancelled');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Booking cancelled. Cancellation fee: ₹${cancellationFee.toStringAsFixed(0)}"),
-            backgroundColor: Colors.orange,
-          ),
-        );
+        _showPaymentDialog(isCancellation: true, cancelAmount: cancellationFee);
       }
     } catch (e) {
       if (mounted) {
