@@ -6,6 +6,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 import '../widgets/full_screen_image_viewer.dart';
+import 'success_screen.dart';
+
 
 class ItemDetailScreen extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -183,15 +185,33 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Item Booked Successfully!"), backgroundColor: kSurface1));
+        final startFmt = DateFormat('MMM d, h:mm a').format(_startTime);
+        final endFmt = DateFormat('MMM d, h:mm a').format(_endTime);
+        final msg = "Hi ${widget.data['ownerName']}, I have booked your item '${widget.data['itemName']}' on RentX for $startFmt - $endFmt. Please coordinate pick-up at ${widget.data['location']} Bhavan.";
+
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => SuccessScreen(
+              type: SuccessType.itemRental,
+              itemName: widget.data['itemName'] ?? 'Item',
+              ownerName: widget.data['ownerName'] ?? 'Owner',
+              ownerPhone: widget.data['ownerPhone'] ?? '',
+              startTime: startFmt,
+              endTime: endFmt,
+              totalCost: _totalCost,
+              whatsappMessage: msg,
+            ),
+          ),
+        );
       }
-      _contactOwnerOnWhatsApp();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Booking Failed: $e"), backgroundColor: Colors.redAccent));
       }
     }
   }
+
 
   Future<void> _contactOwnerOnWhatsApp() async {
     String? phone = widget.data['ownerPhone'];

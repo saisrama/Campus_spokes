@@ -2,10 +2,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 import '../widgets/full_screen_image_viewer.dart';
+import 'success_screen.dart';
+
 
 class CycleDetailScreen extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -218,30 +219,34 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
           _bookingId = ref.id;
           _bookingStatus = 'booked';
         });
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Cycle Booked! Reserved for you."), backgroundColor: kSurface1));
-      }
-      
-      String? ownerPhone = widget.data['ownerPhone'];
-      if (ownerPhone != null && ownerPhone.isNotEmpty && ownerPhone != "N/A") {
-          try {
-            String cleanPhone = ownerPhone.replaceAll(RegExp(r'\D'), '');
-            if (!cleanPhone.startsWith('91') && cleanPhone.length == 10) cleanPhone = '91$cleanPhone';
-            
-            String startTimeStr = DateFormat('MMM d, h:mm a').format(_startTime);
-            String endTimeStr = DateFormat('MMM d, h:mm a').format(_endTime);
-            String message = "Hi, I just reserved your cycle (${widget.data['modelName']}) on *RentX*.\n\n"
-                             "*Time:* $startTimeStr to $endTimeStr\n"
-                             "*Estimated Cost:* ₹${_totalCost.toStringAsFixed(0)}\n\n"
-                             "Please confirm availability.";
-            
-            final Uri waUrl = Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encodeComponent(message)}");
-            await launchUrl(waUrl, mode: LaunchMode.externalApplication);
-          } catch (_) {}
+
+        final startTimeStr = DateFormat('MMM d, h:mm a').format(_startTime);
+        final endTimeStr = DateFormat('MMM d, h:mm a').format(_endTime);
+        final message = "Hi ${widget.data['ownerName'] ?? 'there'}, I just reserved your cycle *${widget.data['modelName']}* on *RentX*.\n\n"
+            "*Time:* $startTimeStr to $endTimeStr\n"
+            "*Estimated Cost:* ₹${_totalCost.toStringAsFixed(0)}\n\nPlease confirm availability.";
+
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => SuccessScreen(
+              type: SuccessType.cycleRental,
+              itemName: widget.data['modelName'] ?? 'Cycle',
+              ownerName: widget.data['ownerName'] ?? 'Owner',
+              ownerPhone: widget.data['ownerPhone'] ?? '',
+              startTime: startTimeStr,
+              endTime: endTimeStr,
+              totalCost: _totalCost,
+              whatsappMessage: message,
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Booking failed: $e"), backgroundColor: Colors.redAccent));
     }
   }
+
 
   void _openFullScreenViewer(int initialIndex) {
     final urls = _allImageUrls;

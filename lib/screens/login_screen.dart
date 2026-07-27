@@ -153,62 +153,22 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // ── NEW LOGO (rentx_logo (1).png) ──
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF09090B),
-                      borderRadius: BorderRadius.circular(28),
-                      border: Border.all(color: const Color(0xFF27272A)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.8),
-                          blurRadius: 30,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: Image.asset(
-                      'assets/images/rentx_logo_new.png',
-                      height: 110,
-                      fit: BoxFit.contain,
-                      errorBuilder: (e, s, t) => const Icon(Icons.bolt, size: 80, color: Colors.white),
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-
-                  // ── SLOGAN PILL ──
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF18181B),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFF27272A)),
-                    ),
-                    child: const Text(
-                      "Rent Anything • Buy Anything • Ride Anywhere",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Color(0xFFA1A1AA),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    "BITS Pilani Hyderabad Campus Marketplace",
-                    style: TextStyle(color: Color(0xFF52525B), fontSize: 11),
+                  // ── NEW LOGO ──
+                  Image.asset(
+                    'assets/images/rentx_logo_new.png',
+                    height: 150,
+                    fit: BoxFit.contain,
+                    errorBuilder: (e, s, t) => const Icon(Icons.bolt, size: 100, color: Colors.white),
                   ),
 
                   const SizedBox(height: 32),
 
-                  // ── RUNNING FEATURES CLASSIFIER ──
+                  // ── RUNNING FEATURES CLASSIFIER (vertical swipe) ──
                   SizedBox(
                     height: 90,
                     child: PageView.builder(
                       controller: _featurePageController,
+                      scrollDirection: Axis.vertical,
                       itemCount: _features.length,
                       onPageChanged: (i) => setState(() => _currentFeaturePage = i),
                       itemBuilder: (context, index) {

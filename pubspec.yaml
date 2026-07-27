@@ -63,20 +63,20 @@ dev_dependencies:
 flutter_launcher_icons:
   android: "ic_launcher"
   ios: true
-  image_path: "assets/images/RentX_logo.png"
+  image_path: "assets/images/rentx_logo_new.png"
   min_sdk_android: 21
   web:
     generate: true
-    image_path: "assets/images/RentX_logo.png"
+    image_path: "assets/images/rentx_logo_new.png"
     background_color: "#000000"
     theme_color: "#000000"
 
 flutter_native_splash:
   color: "#000000"
-  image: "assets/images/RentX_logo.png"
+  image: "assets/images/rentx_logo_new.png"
   android_12:
     color: "#000000"
-    image: "assets/images/RentX_logo.png"
+    image: "assets/images/rentx_logo_new.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

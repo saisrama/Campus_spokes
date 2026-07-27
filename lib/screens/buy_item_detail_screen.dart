@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../widgets/full_screen_image_viewer.dart';
+import 'success_screen.dart';
+
 
 class BuyItemDetailScreen extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -39,19 +40,26 @@ class _BuyItemDetailScreenState extends State<BuyItemDetailScreen> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Seller phone not provided")));
       return;
     }
-    String cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (!cleanPhone.startsWith('91') && cleanPhone.length == 10) cleanPhone = '91$cleanPhone';
 
     final itemName = widget.data['itemName'] ?? 'item';
     final price = widget.data['price'] ?? 0;
     final location = widget.data['location'] ?? 'campus';
     final msg = "Hi ${widget.data['ownerName']}, I'm interested in buying your \"$itemName\" listed for ₹$price on RentX. Can we arrange collection at $location Bhavan?";
 
-    final Uri url = Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encodeComponent(msg)}");
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Could not launch WhatsApp")));
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SuccessScreen(
+            type: SuccessType.purchase,
+            itemName: itemName,
+            ownerName: widget.data['ownerName'] ?? 'Seller',
+            ownerPhone: phone,
+            totalCost: (price is num) ? price.toDouble() : double.tryParse(price.toString()),
+            whatsappMessage: msg,
+          ),
+        ),
+      );
     }
   }
 
