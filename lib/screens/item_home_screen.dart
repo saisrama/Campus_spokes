@@ -401,6 +401,41 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
     );
   }
 
+  Widget _buildSubstanceDisclaimerBanner() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: const [
+          Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 20),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: "STRICT DISCLAIMER: ",
+                    style: TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  TextSpan(
+                    text: "The trade, rental, or exchange of narcotics, alcohol, tobacco, and any other illicit or prohibited substances is strictly prohibited. Engaging in such activities will lead to immediate reporting to the college administration.",
+                    style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSearchAndFilterBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -929,6 +964,9 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
 
                       // Time Slot Filter
                       SliverToBoxAdapter(child: _buildTimeFilter()),
+
+                      // Illicit Substance Disclaimer Banner
+                      SliverToBoxAdapter(child: _buildSubstanceDisclaimerBanner()),
 
                       // Search + Filter/Sort row
                       SliverToBoxAdapter(child: _buildSearchAndFilterBar()),

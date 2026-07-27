@@ -799,6 +799,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                       onTap: _bookItem,
                       icon: Icons.check_circle_outline,
                     ),
+                    _buildDisclaimerAndPolicyCard(),
                   ],
                   const SizedBox(height: 40),
                 ],
@@ -807,6 +808,61 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildDisclaimerAndPolicyCard() {
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: kSurface1,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: kBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.shield_outlined, color: kAccentCyan, size: 18),
+              SizedBox(width: 8),
+              Text(
+                "Disclaimer & Policy",
+                style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildPolicyPoint("No-Show", "Failure to start ride by end time results in full charge of reserved slot."),
+          const SizedBox(height: 8),
+          _buildPolicyPoint("Late Returns", "Charged at 2x the hourly rate for delays beyond the booked slot."),
+          const SizedBox(height: 8),
+          _buildPolicyPoint("Liability", "RentX facilitates connections only. We are not responsible for accidents, damages, or disputes."),
+          const SizedBox(height: 8),
+          _buildPolicyPoint("Disputes", "All financial or physical disputes must be resolved directly between Owner and Renter."),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPolicyPoint(String title, String description) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text("• ", style: TextStyle(color: kTextMuted, fontSize: 12, fontWeight: FontWeight.bold)),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(color: kTextMuted, fontSize: 12, height: 1.4),
+              children: [
+                TextSpan(text: "$title: ", style: const TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
+                TextSpan(text: description),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

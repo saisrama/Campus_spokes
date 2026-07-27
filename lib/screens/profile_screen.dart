@@ -130,6 +130,11 @@ class ProfileScreen extends StatelessWidget {
                   "Users are advised to verify item condition before accepting and to resolve any issues directly with the owner/seller.",
                   style: TextStyle(color: Color(0xFF71717A), fontSize: 11, height: 1.6),
                 ),
+                const SizedBox(height: 8),
+                const Text(
+                  "PROHIBITED ITEMS DISCLAIMER: The trade, rental, purchase, or exchange of narcotics, alcohol, tobacco, weapons, or any illicit substances is strictly prohibited on RentX. Violation will lead to immediate account ban and reporting to the college administration.",
+                  style: TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold, height: 1.5),
+                ),
                 const SizedBox(height: 12),
                 GestureDetector(
                   onTap: () => _showTermsSheet(context),
@@ -335,6 +340,12 @@ class ProfileScreen extends StatelessWidget {
               "7. Conduct",
               "Users agree to interact respectfully and honestly. Fraudulent listings, misuse of contact information, "
               "or abusive behaviour will result in removal from the platform.",
+            ),
+            _termsSection(
+              "8. Prohibition of Narcotics, Alcohol & Illicit Substances",
+              "The trade, listing, rental, sale, or exchange of narcotics, alcohol, tobacco, weapons, prescription medications, "
+              "or any illicit/prohibited substances is strictly prohibited on RentX. "
+              "Engaging in or attempting any such activity will result in immediate termination of account access and direct reporting of all involved users and details to the college administration and relevant legal authorities.",
             ),
             const SizedBox(height: 16),
             Container(

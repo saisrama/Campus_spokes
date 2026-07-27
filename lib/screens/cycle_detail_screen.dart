@@ -710,20 +710,81 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
               color: kSurface1,
               border: Border(top: BorderSide(color: kBorder)),
             ),
-            child: rentXButton(
-              label: _bookingStatus == 'none'
-                  ? "BOOK RIDE NOW"
-                  : (_bookingStatus == 'booked' ? "START RIDE NOW" : (_bookingStatus == 'started' ? "END RIDE & PAY" : "PAYMENT PENDING")),
-              onTap: _bookingStatus == 'none'
-                  ? _createBooking
-                  : (_bookingStatus == 'booked'
-                      ? _startRide
-                      : (_bookingStatus == 'started' ? _endRide : (_bookingStatus == 'payment_pending' ? _showPaymentDialog : null))),
-              icon: Icons.pedal_bike,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                rentXButton(
+                  label: _bookingStatus == 'none'
+                      ? "BOOK RIDE NOW"
+                      : (_bookingStatus == 'booked' ? "START RIDE NOW" : (_bookingStatus == 'started' ? "END RIDE & PAY" : "PAYMENT PENDING")),
+                  onTap: _bookingStatus == 'none'
+                      ? _createBooking
+                      : (_bookingStatus == 'booked'
+                          ? _startRide
+                          : (_bookingStatus == 'started' ? _endRide : (_bookingStatus == 'payment_pending' ? _showPaymentDialog : null))),
+                  icon: Icons.pedal_bike,
+                ),
+                _buildDisclaimerAndPolicyCard(),
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDisclaimerAndPolicyCard() {
+    return Container(
+      margin: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: kBgColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: kBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.shield_outlined, color: kAccentCyan, size: 16),
+              SizedBox(width: 6),
+              Text(
+                "Disclaimer & Policy",
+                style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _buildPolicyPoint("No-Show", "Failure to start ride by end time results in full charge of reserved slot."),
+          const SizedBox(height: 6),
+          _buildPolicyPoint("Late Returns", "Charged at 2x the hourly rate for delays beyond the booked slot."),
+          const SizedBox(height: 6),
+          _buildPolicyPoint("Liability", "RentX facilitates connections only. We are not responsible for accidents, damages, or disputes."),
+          const SizedBox(height: 6),
+          _buildPolicyPoint("Disputes", "All financial or physical disputes must be resolved directly between Owner and Renter."),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPolicyPoint(String title, String description) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text("• ", style: TextStyle(color: kTextMuted, fontSize: 11, fontWeight: FontWeight.bold)),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(color: kTextMuted, fontSize: 11, height: 1.35),
+              children: [
+                TextSpan(text: "$title: ", style: const TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
+                TextSpan(text: description),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
