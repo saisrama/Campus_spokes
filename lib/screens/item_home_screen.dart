@@ -63,6 +63,52 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
     DateTime now = DateTime.now();
     _selectedStartTime = now;
     _selectedEndTime = now.add(const Duration(hours: 2));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkNoShowBookings());
+  }
+
+  /// Check for any 'booked' item bookings whose scheduledEndTime has passed → trigger no-show payment
+  Future<void> _checkNoShowBookings() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      final now = DateTime.now();
+      final snapshot = await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('userId', isEqualTo: user.uid)
+          .where('status', isEqualTo: 'booked')
+          .where('type', isEqualTo: 'item')
+          .get();
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final Timestamp? endTs = data['scheduledEndTime'];
+        if (endTs == null) continue;
+        final endTime = endTs.toDate();
+        if (now.isAfter(endTime)) {
+          final double estimatedCost = (data['estimatedCost'] as num?)?.toDouble()
+              ?? (data['basePrice'] as num?)?.toDouble()
+              ?? 20.0;
+
+          await FirebaseFirestore.instance.collection('bookings').doc(doc.id).update({
+            'status': 'payment_pending',
+            'isNoShow': true,
+            'finalCost': estimatedCost,
+            'noShowAt': FieldValue.serverTimestamp(),
+          });
+
+          if (!mounted) return;
+          final String itemId = data['itemId'] ?? '';
+          final Map<String, dynamic> itemData = (data['itemData'] ?? {}) as Map<String, dynamic>;
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => ItemDetailScreen(data: itemData, itemId: itemId)),
+          );
+          break;
+        }
+      }
+    } catch (e) {
+      debugPrint("No-show check error: $e");
+    }
   }
 
   @override
@@ -712,7 +758,7 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
                 ),
               ),
             ),
-            if (status == 'booked' || status == 'started') ...[
+            if (status == 'booked') ...[
               const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
@@ -799,18 +845,16 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
 
     try {
       await FirebaseFirestore.instance.collection('bookings').doc(bookingId).update({
-        'status': 'cancelled',
+        'status': 'payment_pending',
+        'isCancellation': true,
         'cancelledAt': FieldValue.serverTimestamp(),
         'cancellationFee': cancellationFee,
         'finalCost': cancellationFee,
       });
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Booking cancelled. Cancellation fee: ₹${cancellationFee.toStringAsFixed(0)}"),
-            backgroundColor: Colors.orange,
-          ),
-        );
+        String itemId = bData['itemId'] ?? '';
+        Map<String, dynamic> data = (bData['itemData'] ?? {}) as Map<String, dynamic>;
+        Navigator.push(context, MaterialPageRoute(builder: (_) => ItemDetailScreen(data: data, itemId: itemId)));
       }
     } catch (e) {
       if (context.mounted) {

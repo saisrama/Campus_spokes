@@ -49,11 +49,64 @@ class _HomeScreenState extends State<HomeScreen> {
     NotificationService.initialize();
     _setupNotifications();
     
-    // Force Profile Check & Update Check
+    // Force Profile Check & Update Check & No-Show Check
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkProfileCompletion();
       _checkForUpdate();
+      _checkNoShowBookings();
     });
+  }
+
+  /// Check for any 'booked' bookings whose scheduledEndTime has passed → trigger payment
+  Future<void> _checkNoShowBookings() async {
+    if (user == null) return;
+    try {
+      final now = DateTime.now();
+      final snapshot = await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('userId', isEqualTo: user!.uid)
+          .where('status', isEqualTo: 'booked')
+          .get();
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final Timestamp? endTs = data['scheduledEndTime'];
+        if (endTs == null) continue;
+        final endTime = endTs.toDate();
+        if (now.isAfter(endTime)) {
+          // Mark as payment_pending no-show
+          final double estimatedCost = (data['estimatedCost'] as num?)?.toDouble()
+              ?? (data['basePrice'] as num?)?.toDouble()
+              ?? 20.0;
+
+          await FirebaseFirestore.instance.collection('bookings').doc(doc.id).update({
+            'status': 'payment_pending',
+            'isNoShow': true,
+            'finalCost': estimatedCost,
+            'noShowAt': FieldValue.serverTimestamp(),
+          });
+
+          // Navigate to the correct detail screen so payment popup fires
+          if (!mounted) return;
+          final bool isItemBooking = data.containsKey('itemId');
+          final String targetId = (isItemBooking ? data['itemId'] : data['cycleId']) ?? '';
+          final Map<String, dynamic> itemData = ((isItemBooking ? data['itemData'] : data['cycleData']) ?? {}) as Map<String, dynamic>;
+
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => isItemBooking
+                  ? ItemDetailScreen(data: itemData, itemId: targetId)
+                  : CycleDetailScreen(data: itemData, cycleId: targetId),
+            ),
+          );
+          // Only handle one no-show at a time per app open
+          break;
+        }
+      }
+    } catch (e) {
+      debugPrint("No-show check error: $e");
+    }
   }
 
   Future<void> _checkProfileCompletion() async {
@@ -729,7 +782,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-            if (status == 'booked' || status == 'started') ...[
+            if (status == 'booked') ...[
               const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
@@ -818,18 +871,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       await FirebaseFirestore.instance.collection('bookings').doc(bookingId).update({
-        'status': 'cancelled',
+        'status': 'payment_pending',
+        'isCancellation': true,
         'cancelledAt': FieldValue.serverTimestamp(),
         'cancellationFee': cancellationFee,
         'finalCost': cancellationFee,
       });
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Booking cancelled. Cancellation fee: ₹${cancellationFee.toStringAsFixed(0)}"),
-            backgroundColor: Colors.orange,
-          ),
-        );
+        String targetId = bData['cycleId'] ?? bData['itemId'] ?? '';
+        Map<String, dynamic> data = (bData['cycleData'] ?? bData['itemData'] ?? {}) as Map<String, dynamic>;
+        bool isItemBooking = bData.containsKey('itemId');
+        if (isItemBooking) {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => ItemDetailScreen(data: data, itemId: targetId)));
+        } else {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => CycleDetailScreen(data: data, cycleId: targetId)));
+        }
       }
     } catch (e) {
       if (context.mounted) {

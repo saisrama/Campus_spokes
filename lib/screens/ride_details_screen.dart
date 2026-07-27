@@ -404,7 +404,7 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
             ),
 
             // ACTION BUTTON (OWNER & RENTER CANCEL)
-            if (_status == 'booked' || _status == 'started') ...[
+            if (_status == 'booked') ...[
               const SizedBox(height: 30),
               SizedBox(
                 width: double.infinity,
@@ -511,14 +511,15 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
 
     try {
       await FirebaseFirestore.instance.collection('bookings').doc(widget.bookingId).update({
-        'status': 'cancelled',
+        'status': 'payment_pending',
+        'isCancellation': true,
         'cancelledAt': FieldValue.serverTimestamp(),
         'cancellationFee': cancellationFee,
         'finalCost': cancellationFee,
       });
 
       setState(() {
-        _status = 'cancelled';
+        _status = 'payment_pending';
         _finalCost = cancellationFee;
         _isProcessing = false;
       });

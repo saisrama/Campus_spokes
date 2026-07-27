@@ -184,6 +184,12 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         DateTime now = DateTime.now();
         DateTime newDate = DateTime(now.year, now.month, now.day, pickedTime.hour, pickedTime.minute);
         if (isStart) {
+          if (newDate.isBefore(DateTime.now().subtract(const Duration(minutes: 2)))) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Start time cannot be in the past."), backgroundColor: Colors.redAccent),
+            );
+            return;
+          }
           _startTime = newDate;
           if (_endTime.isBefore(_startTime)) {
             _endTime = _startTime.add(const Duration(hours: 2));
@@ -275,6 +281,32 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
 
   Future<void> _startRide() async {
     if (_bookingId == null) return;
+
+    // No-Show Check: If scheduled end time has passed, block ride start and trigger No-Show payment
+    if (_scheduledEndTime != null && DateTime.now().isAfter(_scheduledEndTime!)) {
+      try {
+        await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({
+          'status': 'payment_pending',
+          'isNoShow': true,
+          'finalCost': _totalCost,
+          'noShowAt': FieldValue.serverTimestamp(),
+        });
+        if (mounted) {
+          setState(() => _bookingStatus = 'payment_pending');
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Booking slot expired (No Show). Full slot charge applies."),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+          _showPaymentDialog();
+        }
+      } catch (e) {
+        debugPrint("No show error: $e");
+      }
+      return;
+    }
+
     try {
       await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({
         'status': 'started',
@@ -325,9 +357,15 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: kBorder)),
         title: Row(
           children: [
-            Icon(isCancellation ? Icons.cancel_outlined : Icons.account_balance_wallet_outlined, color: isCancellation ? Colors.redAccent : kAccentGreen, size: 24),
-            const SizedBox(width: 10),
-            Text(isCancellation ? "Cancellation Fee Payment" : "Payment Details", style: const TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
+            Icon(isCancellation ? Icons.cancel_outlined : Icons.account_balance_wallet_outlined, color: isCancellation ? Colors.redAccent : kAccentGreen, size: 22),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                isCancellation ? "Cancellation Fee" : "Payment Details",
+                style: const TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold, fontSize: 18),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: SingleChildScrollView(
@@ -739,7 +777,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                           : (_bookingStatus == 'started' ? _endRide : (_bookingStatus == 'payment_pending' ? _showPaymentDialog : null))),
                   icon: Icons.pedal_bike,
                 ),
-                if (_bookingStatus == 'booked' || _bookingStatus == 'started') ...[
+                if (_bookingStatus == 'booked') ...[
                   const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
@@ -926,13 +964,14 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
 
     try {
       await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({
-        'status': 'cancelled',
+        'status': 'payment_pending',
+        'isCancellation': true,
         'cancelledAt': FieldValue.serverTimestamp(),
         'cancellationFee': cancellationFee,
         'finalCost': cancellationFee,
       });
       if (mounted) {
-        setState(() => _bookingStatus = 'cancelled');
+        setState(() => _bookingStatus = 'payment_pending');
         _showPaymentDialog(isCancellation: true, cancelAmount: cancellationFee);
       }
     } catch (e) {
