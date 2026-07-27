@@ -34,8 +34,8 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       _FeatureItem(icon: Icons.campaign_outlined, label: "Post Requests", sub: "Can't find it? Post a request"),
     ];
     
-    // Start at high index for infinite vertical loop
-    _featurePageController = PageController(viewportFraction: 0.8, initialPage: 1000);
+    // Viewport fraction 1.0 prevents height calculation overflow
+    _featurePageController = PageController(viewportFraction: 1.0, initialPage: 1000);
 
     // Auto-scroll vertically every 3 seconds endlessly
     Future.doWhile(() async {
@@ -126,158 +126,150 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF000000),
-      body: Stack(
-        children: [
-          // Ambient radial glow background
-          Positioned(
-            top: -80,
-            left: MediaQuery.of(context).size.width / 2 - 160,
-            child: Container(
-              width: 320,
-              height: 320,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    Colors.white.withValues(alpha: 0.07),
-                    Colors.transparent,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // Ambient radial glow background
+            Positioned(
+              top: -60,
+              left: MediaQuery.of(context).size.width / 2 - 140,
+              child: Container(
+                width: 280,
+                height: 280,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.07),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // ── RENTX LOGO ──
+                    Image.asset(
+                      'assets/images/rentx_logo_new.png',
+                      height: 155,
+                      fit: BoxFit.contain,
+                      errorBuilder: (e, s, t) => const Icon(Icons.bolt, size: 100, color: Colors.white),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // ── BITS PILANI HYDERABAD CAMPUS MARKETPLACE TEXT ──
+                    const Text(
+                      "BITS PILANI HYDERABAD CAMPUS MARKETPLACE",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color(0xFF71717A),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.3,
+                      ),
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    // ── INFINITE VERTICAL CLASSIFIED CARDS (NO OVERFLOW) ──
+                    SizedBox(
+                      height: 76,
+                      child: PageView.builder(
+                        controller: _featurePageController,
+                        scrollDirection: Axis.vertical,
+                        itemCount: 10000,
+                        itemBuilder: (context, index) {
+                          final f = _features[index % _features.length];
+                          return Container(
+                            margin: const EdgeInsets.symmetric(vertical: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF09090B),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(color: const Color(0xFF27272A)),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(f.icon, color: Colors.white, size: 20),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        f.label,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        f.sub,
+                                        style: const TextStyle(color: Color(0xFF71717A), fontSize: 11),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(Icons.keyboard_arrow_down, color: Color(0xFF3F3F46), size: 16),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    // ── SIGN IN BUTTON ──
+                    _isLoading
+                        ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                        : ElevatedButton.icon(
+                            onPressed: _handleSignIn,
+                            icon: Image.network(
+                              'https://cdn-icons-png.flaticon.com/512/300/300221.png',
+                              height: 22,
+                              errorBuilder: (e, s, t) => const Icon(Icons.login, color: Colors.black, size: 20),
+                            ),
+                            label: const Text(
+                              "Continue with BITS Google ID",
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFAFAFA),
+                              foregroundColor: Colors.black,
+                              minimumSize: const Size(double.infinity, 52),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              elevation: 0,
+                            ),
+                          ),
                   ],
                 ),
               ),
             ),
-          ),
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 28),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const SizedBox(height: 20),
-
-                  // ── BIGGER RENTX LOGO ──
-                  Image.asset(
-                    'assets/images/rentx_logo_new.png',
-                    height: 180,
-                    fit: BoxFit.contain,
-                    errorBuilder: (e, s, t) => const Icon(Icons.bolt, size: 120, color: Colors.white),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // ── BITS PILANI HYDERABAD CAMPUS MARKETPLACE TEXT ──
-                  const Text(
-                    "BITS PILANI HYDERABAD CAMPUS MARKETPLACE",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Color(0xFF71717A),
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.4,
-                    ),
-                  ),
-
-                  const SizedBox(height: 36),
-
-                  // ── INFINITE VERTICAL CLASSIFIED CARDS (NO PROGRESS BAR) ──
-                  SizedBox(
-                    height: 96,
-                    child: PageView.builder(
-                      controller: _featurePageController,
-                      scrollDirection: Axis.vertical,
-                      itemCount: 10000, // Infinite scroll loop
-                      itemBuilder: (context, index) {
-                        final f = _features[index % _features.length];
-                        return Container(
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF09090B),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: const Color(0xFF27272A)),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.4),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                child: Icon(f.icon, color: Colors.white, size: 22),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      f.label,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      f.sub,
-                                      style: const TextStyle(color: Color(0xFF71717A), fontSize: 11),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(Icons.keyboard_arrow_down, color: Color(0xFF3F3F46), size: 18),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-
-                  const SizedBox(height: 44),
-
-                  // ── SIGN IN BUTTON ──
-                  _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-                      : ElevatedButton.icon(
-                          onPressed: _handleSignIn,
-                          icon: Image.network(
-                            'https://cdn-icons-png.flaticon.com/512/300/300221.png',
-                            height: 22,
-                            errorBuilder: (e, s, t) => const Icon(Icons.login, color: Colors.black, size: 20),
-                          ),
-                          label: const Text(
-                            "Continue with BITS Google ID",
-                            style: TextStyle(
-                              color: Colors.black,
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFFAFAFA),
-                            foregroundColor: Colors.black,
-                            minimumSize: const Size(double.infinity, 54),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            elevation: 0,
-                          ),
-                        ),
-                  const SizedBox(height: 20),
-                ],
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

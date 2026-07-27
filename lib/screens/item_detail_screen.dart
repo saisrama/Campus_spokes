@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -263,35 +264,162 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
 
   void _showPaymentDialog() {
     String upi = widget.data['ownerUpiId'] ?? 'N/A';
+    String ownerName = widget.data['ownerName'] ?? 'Owner';
+    double amount = _totalCost;
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         backgroundColor: kSurface1,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: kBorder)),
-        title: const Text("Payment Details", style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("Total Amount: ₹${_totalCost.toStringAsFixed(0)}", style: const TextStyle(color: kTextPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            const Text("Owner UPI ID:", style: TextStyle(color: kTextMuted, fontSize: 12)),
-            SelectableText(upi, style: const TextStyle(color: kAccentCyan, fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
-            const Text("Please send payment via GPay/PhonePe/Paytm to the UPI ID above.", style: TextStyle(color: kTextDim, fontSize: 12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: kBorder)),
+        title: Row(
+          children: const [
+            Icon(Icons.account_balance_wallet_outlined, color: kAccentGreen, size: 24),
+            SizedBox(width: 10),
+            Text("Payment Details", style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
           ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF18181B),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFF27272A)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("TOTAL AMOUNT DUE", style: TextStyle(color: kTextMuted, fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text("₹${amount.toStringAsFixed(0)}", style: const TextStyle(color: kAccentGreen, fontSize: 26, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              const Text("OWNER UPI ID", style: TextStyle(color: kTextMuted, fontSize: 11, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF18181B),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF27272A)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SelectableText(
+                        upi,
+                        style: const TextStyle(color: kAccentCyan, fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.copy_rounded, color: kTextPrimary, size: 20),
+                      tooltip: "Copy UPI ID",
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: upi));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text("Copied '$upi' to clipboard!"), backgroundColor: kSurface1),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 18),
+
+              // ── PAY VIA UPI BUTTON ──
+              ElevatedButton.icon(
+                onPressed: () async {
+                  if (upi.isEmpty || upi == 'N/A') {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("UPI ID is not provided by owner.")),
+                    );
+                    return;
+                  }
+
+                  final cleanUpi = upi.trim();
+                  final cleanName = Uri.encodeComponent(ownerName);
+                  final amtStr = amount.toStringAsFixed(2);
+                  final uriString = "upi://pay?pa=$cleanUpi&pn=$cleanName&am=$amtStr&cu=INR&tn=RentX%20Payment";
+                  final uri = Uri.parse(uriString);
+
+                  try {
+                    bool launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    if (!launched) {
+                      await Clipboard.setData(ClipboardData(text: cleanUpi));
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text("UPI ID ($cleanUpi) copied! Open GPay or PhonePe to pay."), backgroundColor: kAccentGreen),
+                        );
+                      }
+                    }
+                  } catch (e) {
+                    await Clipboard.setData(ClipboardData(text: cleanUpi));
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("UPI ID ($cleanUpi) copied to clipboard! Paste in your UPI app."), backgroundColor: kAccentGreen),
+                      );
+                    }
+                  }
+                },
+                icon: const Icon(Icons.payment, color: Colors.black, size: 20),
+                label: const Text("Pay via Any UPI App", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF22C55E),
+                  minimumSize: const Size(double.infinity, 48),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // ── COPY UPI ID BUTTON ──
+              OutlinedButton.icon(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: upi));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("UPI ID '$upi' copied to clipboard!"), backgroundColor: kSurface1),
+                  );
+                },
+                icon: const Icon(Icons.content_copy, color: kTextPrimary, size: 18),
+                label: const Text("Copy UPI ID Only", style: TextStyle(color: kTextPrimary, fontSize: 13)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: kBorder),
+                  minimumSize: const Size(double.infinity, 44),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: kTextPrimary, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kTextPrimary,
+              foregroundColor: Colors.black,
+              minimumSize: const Size(double.infinity, 46),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
             onPressed: () async {
-              await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({'status': 'completed'});
-              setState(() => _bookingStatus = 'completed');
-              Navigator.pop(context);
+              if (_bookingId != null) {
+                await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({'status': 'completed'});
+              }
+              if (mounted) setState(() => _bookingStatus = 'completed');
+              if (mounted) Navigator.pop(dialogCtx);
               _showReviewDialog();
             },
-            child: const Text("I Have Paid", style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text("I HAVE COMPLETED PAYMENT", style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
