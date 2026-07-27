@@ -19,6 +19,7 @@ class BuyHomeScreen extends StatefulWidget {
 class _BuyHomeScreenState extends State<BuyHomeScreen> {
   final User? user = FirebaseAuth.instance.currentUser;
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = '';
 
   List<String> _selectedCategories = [];
@@ -39,14 +40,12 @@ class _BuyHomeScreenState extends State<BuyHomeScreen> {
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(() {
-      setState(() => _searchQuery = _searchController.text.toLowerCase().trim());
-    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -208,7 +207,12 @@ class _BuyHomeScreenState extends State<BuyHomeScreen> {
             height: 48,
             decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.white12)),
             child: TextField(
+              key: const ValueKey('buy_search_field'),
               controller: _searchController,
+              focusNode: _searchFocusNode,
+              onChanged: (val) {
+                setState(() => _searchQuery = val.toLowerCase().trim());
+              },
               style: const TextStyle(color: Colors.white, fontSize: 14),
               decoration: const InputDecoration(
                 hintText: 'Search items for sale...',
@@ -285,6 +289,10 @@ class _BuyHomeScreenState extends State<BuyHomeScreen> {
 
   Widget _buildItemCard(Map<String, dynamic> data, String itemId) {
     final isSold = data['isSold'] == true;
+    final price = data['price'] ?? 0;
+    final itemType = data['itemType'] ?? 'General';
+    final condition = data['condition'] ?? 'Good';
+
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BuyItemDetailScreen(data: data, itemId: itemId))),
       child: Container(
@@ -297,22 +305,30 @@ class _BuyHomeScreenState extends State<BuyHomeScreen> {
             child: _buildImage(data['imageUrl']),
           ))),
           Positioned.fill(child: Container(decoration: BoxDecoration(borderRadius: BorderRadius.circular(24), gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black.withValues(alpha: 0.95)])))),
-          if (isSold) Positioned(top: 14, left: 14, child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(12)), child: const Text("SOLD", style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)))),
-          Positioned(top: 14, right: 14, child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.orangeAccent, borderRadius: BorderRadius.circular(16)), child: Text("₹${data['price'] ?? 0}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)))),
+          if (isSold)
+            Positioned(top: 14, left: 14, child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(12)), child: const Text("SOLD", style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)))),
+          Positioned(top: 14, right: 14, child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.orangeAccent, borderRadius: BorderRadius.circular(16)), child: Text(itemType, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)))),
           Positioned(
             bottom: 14, left: 14, right: 14,
             child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, crossAxisAlignment: CrossAxisAlignment.end, children: [
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(data['itemName'] ?? 'Item', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 3),
-                Text("${data['itemType'] ?? ''} • ${data['condition'] ?? ''}", style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                Text("Condition: $condition", style: const TextStyle(color: Colors.white60, fontSize: 12)),
                 const SizedBox(height: 2),
                 Row(children: [
                   const Icon(Icons.location_on, color: Colors.orangeAccent, size: 12),
                   const SizedBox(width: 4),
-                  Text("${data['location'] ?? ''} Bhavan", style: const TextStyle(color: Colors.white60, fontSize: 11)),
+                  Text("Collect: ${data['location'] ?? ''} Bhavan", style: const TextStyle(color: Colors.white60, fontSize: 11)),
                 ]),
               ])),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text("₹$price", style: const TextStyle(color: Colors.orangeAccent, fontSize: 22, fontWeight: FontWeight.bold)),
+                  const Text("FOR SALE", style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
+                ],
+              ),
             ]),
           ),
         ]),

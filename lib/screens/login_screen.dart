@@ -30,7 +30,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       _FeatureItem(icon: Icons.pedal_bike_outlined, label: "Rent a Cycle", sub: "Quick campus rides from ₹10/hr"),
       _FeatureItem(icon: Icons.inventory_2_outlined, label: "Rent Anything", sub: "Electronics, tools, sports gear"),
       _FeatureItem(icon: Icons.shopping_bag_outlined, label: "Buy & Sell", sub: "Peer-to-peer campus marketplace"),
-      _FeatureItem(icon: Icons.explore_outlined, label: "Explore Campus", sub: "Eateries & destinations nearby"),
+      _FeatureItem(icon: Icons.explore_outlined, label: "Explore", sub: "Eateries & destinations nearby"),
       _FeatureItem(icon: Icons.campaign_outlined, label: "Post Requests", sub: "Can't find it? Post a request"),
     ];
     

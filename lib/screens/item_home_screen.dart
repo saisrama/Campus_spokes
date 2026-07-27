@@ -22,6 +22,7 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
 
   // Search
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = '';
 
   // Filter state
@@ -62,14 +63,12 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
     DateTime now = DateTime.now();
     _selectedStartTime = now;
     _selectedEndTime = now.add(const Duration(hours: 2));
-    _searchController.addListener(() {
-      setState(() => _searchQuery = _searchController.text.toLowerCase().trim());
-    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -416,7 +415,12 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
                 border: Border.all(color: Colors.white12),
               ),
               child: TextField(
+                key: const ValueKey('item_search_field'),
                 controller: _searchController,
+                focusNode: _searchFocusNode,
+                onChanged: (val) {
+                  setState(() => _searchQuery = val.toLowerCase().trim());
+                },
                 style: const TextStyle(color: Colors.white, fontSize: 14),
                 decoration: const InputDecoration(
                   hintText: 'Search items...',
