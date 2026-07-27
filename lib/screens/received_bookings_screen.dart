@@ -111,10 +111,10 @@ class _BookingTabView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // One stream for all bookings owned by this user, filtered client-side by type
+    // No orderBy to avoid requiring a composite Firestore index — sort client-side
     final stream = FirebaseFirestore.instance
         .collection('bookings')
         .where('ownerId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
         .snapshots();
 
     return StreamBuilder<QuerySnapshot>(
@@ -148,6 +148,18 @@ class _BookingTabView extends StatelessWidget {
             return m['type'] == 'item' || (m.containsKey('itemId') && !m.containsKey('saleItemId'));
           }).toList();
         }
+
+        // Sort by createdAt descending client-side
+        docs.sort((a, b) {
+          final am = a.data() as Map<String, dynamic>;
+          final bm = b.data() as Map<String, dynamic>;
+          final at = am['createdAt'];
+          final bt = bm['createdAt'];
+          if (at == null && bt == null) return 0;
+          if (at == null) return 1;
+          if (bt == null) return -1;
+          return (bt as Timestamp).compareTo(at as Timestamp);
+        });
 
         if (docs.isEmpty) {
           return rentXEmptyState(

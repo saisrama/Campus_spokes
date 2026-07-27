@@ -155,6 +155,14 @@ class ProfileScreen extends StatelessWidget {
                     }
                   },
                 ),
+                const Divider(color: Color(0xFF18181B), height: 1),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.gavel_rounded,
+                  color: const Color(0xFF94A3B8),
+                  title: "Terms & Conditions",
+                  onTap: () => _showTermsSheet(context),
+                ),
               ],
             ),
           ),
@@ -181,7 +189,61 @@ class ProfileScreen extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 28),
+          const SizedBox(height: 16),
+
+          // TERMS & CONDITIONS CARD
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF09090B),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFF27272A)),
+            ),
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF94A3B8).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: const Icon(Icons.gavel_rounded, color: Color(0xFF94A3B8), size: 16),
+                    ),
+                    const SizedBox(width: 10),
+                    const Text(
+                      "Platform Notice",
+                      style: TextStyle(color: Color(0xFFFAFAFA), fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  "RentX acts solely as a peer-to-peer intermediary platform connecting students on campus. "
+                  "All transactions, rentals, and purchases are conducted directly between the parties involved.",
+                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, height: 1.6),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "RentX bears no liability for disputes, damages, losses, or misrepresentations arising from any listing or transaction. "
+                  "Users are advised to verify item condition before accepting and to resolve any issues directly with the owner/seller.",
+                  style: TextStyle(color: Color(0xFF71717A), fontSize: 11, height: 1.6),
+                ),
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () => _showTermsSheet(context),
+                  child: const Text(
+                    "Read full Terms & Conditions →",
+                    style: TextStyle(color: Color(0xFF38BDF8), fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
 
           // CREDITS & ACKNOWLEDGMENTS
           Padding(
@@ -208,6 +270,126 @@ class ProfileScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 30),
+        ],
+      ),
+    );
+  }
+
+  void _showTermsSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF09090B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.85,
+        maxChildSize: 0.95,
+        minChildSize: 0.5,
+        builder: (context, scrollController) => ListView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+          children: [
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 8, bottom: 20),
+                width: 40, height: 4,
+                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const Text(
+              "Terms & Conditions",
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              "Effective for all RentX platform users",
+              style: TextStyle(color: Color(0xFF71717A), fontSize: 12),
+            ),
+            const SizedBox(height: 24),
+            _termsSection(
+              "1. Platform Role",
+              "RentX is a peer-to-peer campus marketplace that connects students who wish to rent, lend, or sell items. "
+              "RentX serves exclusively as a facilitating intermediary and is not a party to any transaction between users.",
+            ),
+            _termsSection(
+              "2. No Liability",
+              "RentX shall not be held responsible or liable for any disputes, damages, theft, loss, injury, misrepresentation, "
+              "or conflicts that arise between users in connection with any listing, rental, sale, or in-person exchange. "
+              "All interactions are at the users' own risk.",
+            ),
+            _termsSection(
+              "3. Direct Resolution",
+              "All disputes must be resolved directly between the parties involved (owner/seller and renter/buyer). "
+              "RentX does not guarantee or mediate any resolution, refund, or compensation. "
+              "We strongly encourage users to verify item condition in person before completing any handover.",
+            ),
+            _termsSection(
+              "4. User Responsibility",
+              "By using RentX, you agree that you are solely responsible for your listings, the accuracy of item descriptions, "
+              "and the condition of items at the time of handover. Owners must ensure items are safe and functional before listing them.",
+            ),
+            _termsSection(
+              "5. Payments",
+              "RentX does not process or hold any payments. All financial transactions are arranged directly between users. "
+              "RentX is not responsible for failed payments, overcharges, or payment disputes.",
+            ),
+            _termsSection(
+              "6. Privacy",
+              "Phone numbers and contact details shared on the platform are used solely for facilitating communication "
+              "between parties for a transaction. Do not share sensitive personal information beyond what is necessary.",
+            ),
+            _termsSection(
+              "7. Conduct",
+              "Users agree to interact respectfully and honestly. Fraudulent listings, misuse of contact information, "
+              "or abusive behaviour will result in removal from the platform.",
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1E1E),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: const Text(
+                "By using RentX, you acknowledge that you have read, understood, and agreed to these terms. "
+                "If you have a grievance, please reach out via the \"File Grievance\" option on your profile.",
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, height: 1.6),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _termsSection(String title, String body) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            body,
+            style: const TextStyle(
+              color: Color(0xFF94A3B8),
+              fontSize: 13,
+              height: 1.65,
+            ),
+          ),
         ],
       ),
     );
