@@ -631,101 +631,104 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
       buttonColor = Colors.green;
     }
 
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF2C2C3E), Color(0xFF1E1E2E)]),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: statusColor, width: 2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text("ACTIVE ITEM RENTAL", style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8)),
-                child: Text(displayStatus, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
-              )
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: _buildImage(data['imageUrl'] ?? (data['imageUrls'] is List && (data['imageUrls'] as List).isNotEmpty ? data['imageUrls'][0] : ''), width: 60, height: 60),
-              ),
-              const SizedBox(width: 15),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(data['itemName'] ?? 'Item', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                    Text("Collect: ${data['location'] ?? 'Campus'} Bhavan", style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                  ],
-                ),
-              )
-            ],
-          ),
-          const SizedBox(height: 15),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: buttonColor,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: () async {
-                if (status == 'booked') {
-                  try {
-                    await FirebaseFirestore.instance.collection('bookings').doc(booking.id).update({
-                      'status': 'started',
-                      'startTime': FieldValue.serverTimestamp(),
-                    });
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Rental Session Started!"), backgroundColor: Color(0xFF18181B)),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("Error starting session: $e"), backgroundColor: Colors.redAccent),
-                      );
-                    }
-                  }
-                } else {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => ItemDetailScreen(data: data, itemId: itemId)));
-                }
-              },
-              child: Text(
-                buttonText, 
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ItemDetailScreen(data: data, itemId: itemId))),
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(colors: [Color(0xFF2C2C3E), Color(0xFF1E1E2E)]),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: statusColor, width: 2),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text("ACTIVE ITEM RENTAL", style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8)),
+                  child: Text(displayStatus, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
+                )
+              ],
             ),
-          ),
-          if (status == 'booked' || status == 'started') ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: _buildImage(data['imageUrl'] ?? (data['imageUrls'] is List && (data['imageUrls'] as List).isNotEmpty ? data['imageUrls'][0] : ''), width: 60, height: 60),
+                ),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(data['itemName'] ?? 'Item', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text("Collect: ${data['location'] ?? 'Campus'} Bhavan", style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                    ],
+                  ),
+                )
+              ],
+            ),
+            const SizedBox(height: 15),
             SizedBox(
               width: double.infinity,
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.redAccent),
-                  foregroundColor: Colors.redAccent,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: buttonColor,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                onPressed: () => _cancelItemBookingByRenter(context, booking.id, bData),
-                child: const Text("CANCEL BOOKING (50% Fee)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                onPressed: () async {
+                  if (status == 'booked') {
+                    try {
+                      await FirebaseFirestore.instance.collection('bookings').doc(booking.id).update({
+                        'status': 'started',
+                        'startTime': FieldValue.serverTimestamp(),
+                      });
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Rental Session Started!"), backgroundColor: Color(0xFF18181B)),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text("Error starting session: $e"), backgroundColor: Colors.redAccent),
+                        );
+                      }
+                    }
+                  } else {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => ItemDetailScreen(data: data, itemId: itemId)));
+                  }
+                },
+                child: Text(
+                  buttonText, 
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
+            if (status == 'booked' || status == 'started') ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.redAccent),
+                    foregroundColor: Colors.redAccent,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () => _cancelItemBookingByRenter(context, booking.id, bData),
+                  child: const Text("CANCEL BOOKING (50% Fee)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

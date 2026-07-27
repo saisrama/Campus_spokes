@@ -638,11 +638,19 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
 
-    return Container(
-      width: double.infinity,
-      margin: EdgeInsets.all(16),
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
+    return GestureDetector(
+      onTap: () {
+        if (isItemBooking) {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => ItemDetailScreen(data: data, itemId: targetId)));
+        } else {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => CycleDetailScreen(data: data, cycleId: targetId)));
+        }
+      },
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
         gradient: LinearGradient(colors: [Color(0xFF2C2C2C), Color(0xFF1E1E1E)]),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: statusColor, width: 2)
@@ -735,11 +743,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: const Text("CANCEL BOOKING (50% Fee)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
               ),
             ),
-          ],
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Future<void> _cancelBookingByRenter(BuildContext context, String bookingId, Map<String, dynamic> bData) async {
     double base = 20.0;

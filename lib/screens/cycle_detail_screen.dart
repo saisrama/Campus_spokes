@@ -311,11 +311,11 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
     }
   }
 
-  void _showPaymentDialog() {
+  void _showPaymentDialog({bool isCancellation = false, double? cancelAmount}) {
     String upi = widget.data['ownerUpiId'] ?? widget.data['upiId'] ?? 'N/A';
     String ownerName = widget.data['ownerName'] ?? 'Owner';
     String modelName = widget.data['modelName'] ?? 'Cycle';
-    double amount = _totalCost;
+    double amount = isCancellation ? (cancelAmount ?? (_totalCost * 0.5)) : _totalCost;
 
     showDialog(
       context: context,
@@ -324,10 +324,10 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         backgroundColor: kSurface1,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: kBorder)),
         title: Row(
-          children: const [
-            Icon(Icons.account_balance_wallet_outlined, color: kAccentGreen, size: 24),
-            SizedBox(width: 10),
-            Text("Payment Details", style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
+          children: [
+            Icon(isCancellation ? Icons.cancel_outlined : Icons.account_balance_wallet_outlined, color: isCancellation ? Colors.redAccent : kAccentGreen, size: 24),
+            const SizedBox(width: 10),
+            Text(isCancellation ? "Cancellation Fee Payment" : "Payment Details", style: const TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
           ],
         ),
         content: SingleChildScrollView(
@@ -341,14 +341,14 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF18181B),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFF27272A)),
+                  border: Border.all(color: isCancellation ? Colors.redAccent.withValues(alpha: 0.3) : const Color(0xFF27272A)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("TOTAL AMOUNT DUE", style: TextStyle(color: kTextMuted, fontSize: 11, fontWeight: FontWeight.bold)),
+                    Text(isCancellation ? "CANCELLATION FEE DUE (50%)" : "TOTAL AMOUNT DUE", style: TextStyle(color: isCancellation ? Colors.redAccent : kTextMuted, fontSize: 11, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
-                    Text("₹${amount.toStringAsFixed(0)}", style: const TextStyle(color: kAccentGreen, fontSize: 26, fontWeight: FontWeight.bold)),
+                    Text("₹${amount.toStringAsFixed(0)}", style: TextStyle(color: isCancellation ? Colors.redAccent : kAccentGreen, fontSize: 26, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
@@ -463,9 +463,12 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
             ),
             onPressed: () async {
               if (_bookingId != null) {
-                await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({'status': 'completed'});
+                await FirebaseFirestore.instance.collection('bookings').doc(_bookingId).update({
+                  'status': isCancellation ? 'cancelled' : 'completed',
+                  'finalCost': amount,
+                });
               }
-              if (mounted) setState(() => _bookingStatus = 'none');
+              if (mounted) setState(() => _bookingStatus = isCancellation ? 'cancelled' : 'none');
               if (mounted) Navigator.pop(dialogCtx);
 
               String cleanPhone = (widget.data['ownerPhone'] ?? '').replaceAll(RegExp(r'[^0-9]'), '');
@@ -473,12 +476,21 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                 if (!cleanPhone.startsWith('91') && cleanPhone.length == 10) {
                   cleanPhone = '91$cleanPhone';
                 }
-                String msg = "Hi $ownerName, I have completed the payment of ₹${amount.toStringAsFixed(0)} for renting your cycle *$modelName* on RentX.\n\n"
-                    "📋 *Rental Payment Summary:*\n"
-                    "• Cycle: $modelName\n"
-                    "• Duration: ${_durationInHours.toStringAsFixed(1)} hrs\n"
-                    "• Amount Paid: ₹${amount.toStringAsFixed(0)}\n\n"
-                    "Please verify the payment. Thank you!";
+                String msg;
+                if (isCancellation) {
+                  msg = "Hi $ownerName, I have completed the cancellation fee payment of ₹${amount.toStringAsFixed(0)} for renting your cycle *$modelName* on RentX.\n\n"
+                      "📋 *Cancellation Fee Payment Summary:*\n"
+                      "• Cycle: $modelName\n"
+                      "• Cancellation Fee (50%): ₹${amount.toStringAsFixed(0)}\n\n"
+                      "Please verify the payment. Thank you!";
+                } else {
+                  msg = "Hi $ownerName, I have completed the payment of ₹${amount.toStringAsFixed(0)} for renting your cycle *$modelName* on RentX.\n\n"
+                      "📋 *Rental Payment Summary:*\n"
+                      "• Cycle: $modelName\n"
+                      "• Duration: ${_durationInHours.toStringAsFixed(1)} hrs\n"
+                      "• Amount Paid: ₹${amount.toStringAsFixed(0)}\n\n"
+                      "Please verify the payment. Thank you!";
+                }
                 final Uri url = Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encodeComponent(msg)}");
                 if (await canLaunchUrl(url)) {
                   await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -487,11 +499,14 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
 
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Payment Marked Complete! Thank you."), backgroundColor: kSurface1),
+                  SnackBar(
+                    content: Text(isCancellation ? "Cancellation Fee Payment Sent! Thank you." : "Payment Marked Complete! Thank you."),
+                    backgroundColor: kSurface1,
+                  ),
                 );
               }
             },
-            child: const Text("I HAVE COMPLETED PAYMENT", style: TextStyle(fontWeight: FontWeight.bold)),
+            child: Text(isCancellation ? "I HAVE PAID CANCELLATION FEE" : "I HAVE COMPLETED PAYMENT", style: const TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -918,12 +933,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
       });
       if (mounted) {
         setState(() => _bookingStatus = 'cancelled');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Booking cancelled. Cancellation fee: ₹${cancellationFee.toStringAsFixed(0)}"),
-            backgroundColor: Colors.orange,
-          ),
-        );
+        _showPaymentDialog(isCancellation: true, cancelAmount: cancellationFee);
       }
     } catch (e) {
       if (mounted) {
