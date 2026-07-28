@@ -34,15 +34,28 @@ class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription? _ownerNotificationStream;
   StreamSubscription? _renterNotificationStream;
 
+  // ── NEW: Search & Filter ──
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  final ValueNotifier<String> _searchQuery = ValueNotifier('');
+
+  List<String> _selectedGearTypes = [];
+  String _sortBy = 'default';
+
+  final List<String> _gearTypes = ["Single Geared", "Multi Geared"];
+
+  // Active booking — fetched once to avoid nested StreamBuilder flashing
+  DocumentSnapshot? _activeBooking;
+  bool _bookingLoaded = false;
+
+  int get _activeFilterCount =>
+      _selectedGearTypes.length + (_sortBy != 'default' ? 1 : 0);
+
   @override
   void initState() {
     super.initState();
     // Default Time Slot
     DateTime now = DateTime.now();
-    // Round to next 15 mins? Or just keep null to let user pick?
-    // User wants control. Let's start with NULL or Default? 
-    // Code had: _selectedStartTime = TimeOfDay.now();
-    // Let's keep it initialized for better UX
     _selectedStartTime = now;
     _selectedEndTime = now.add(Duration(hours: 2));
 
@@ -54,7 +67,39 @@ class _HomeScreenState extends State<HomeScreen> {
       _checkProfileCompletion();
       _checkForUpdate();
       _checkNoShowBookings();
+      _fetchActiveBooking();
     });
+  }
+
+  /// Fetch active booking once (not via nested StreamBuilder) to prevent flashing
+  Future<void> _fetchActiveBooking() async {
+    if (user == null) return;
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('userId', isEqualTo: user!.uid)
+          .where('status', whereIn: ['booked', 'started', 'payment_pending'])
+          .get();
+
+      if (!mounted) return;
+      if (snapshot.docs.isNotEmpty) {
+        final cycleBookings = snapshot.docs.where((d) {
+          final map = d.data() as Map<String, dynamic>;
+          return map.containsKey('cycleId');
+        }).toList();
+        if (cycleBookings.isNotEmpty) {
+          setState(() {
+            _activeBooking = cycleBookings.first;
+            _bookingLoaded = true;
+          });
+          return;
+        }
+      }
+      setState(() => _bookingLoaded = true);
+    } catch (e) {
+      debugPrint("Error fetching active booking: $e");
+      if (mounted) setState(() => _bookingLoaded = true);
+    }
   }
 
   /// Check for any 'booked' bookings whose scheduledEndTime has passed → trigger payment
@@ -277,7 +322,272 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _ownerNotificationStream?.cancel();
     _renterNotificationStream?.cancel();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _searchQuery.dispose();
     super.dispose();
+  }
+
+  // ── NEW: Filter & Sort Sheet ──
+  void _openFilterSortSheet() {
+    List<String> tempGearTypes = List.from(_selectedGearTypes);
+    String tempSort = _sortBy;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1A1A2E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return DraggableScrollableSheet(
+              expand: false,
+              initialChildSize: 0.6,
+              maxChildSize: 0.8,
+              minChildSize: 0.4,
+              builder: (context, scrollController) {
+                return Column(
+                  children: [
+                    // Handle
+                    Container(
+                      margin: const EdgeInsets.only(top: 12, bottom: 8),
+                      width: 40, height: 4,
+                      decoration: BoxDecoration(color: Colors.white30, borderRadius: BorderRadius.circular(2)),
+                    ),
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text("Filter & Sort", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                          TextButton(
+                            onPressed: () => setSheetState(() { tempGearTypes.clear(); tempSort = 'default'; }),
+                            child: const Text("Clear All", style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(color: Colors.white12),
+                    Expanded(
+                      child: ListView(
+                        controller: scrollController,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        children: [
+                          // SORT BY
+                          const Text("SORT BY", style: TextStyle(color: Color(0xFF38BDF8), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 10, runSpacing: 8,
+                            children: [
+                              _sortChip('Default', 'default', tempSort, (v) => setSheetState(() => tempSort = v)),
+                              _sortChip('Price: Low to High', 'price_asc', tempSort, (v) => setSheetState(() => tempSort = v)),
+                              _sortChip('Price: High to Low', 'price_desc', tempSort, (v) => setSheetState(() => tempSort = v)),
+                              _sortChip('Newest First', 'newest', tempSort, (v) => setSheetState(() => tempSort = v)),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+
+                          // GEAR TYPE
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text("GEAR TYPE", style: TextStyle(color: Color(0xFF38BDF8), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                              if (tempGearTypes.isNotEmpty)
+                                GestureDetector(
+                                  onTap: () => setSheetState(() => tempGearTypes.clear()),
+                                  child: const Text("Clear", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 10, runSpacing: 8,
+                            children: _gearTypes.map((gear) {
+                              final selected = tempGearTypes.contains(gear);
+                              return FilterChip(
+                                label: Text(gear),
+                                selected: selected,
+                                onSelected: (val) {
+                                  setSheetState(() {
+                                    if (val) tempGearTypes.add(gear); else tempGearTypes.remove(gear);
+                                  });
+                                },
+                                selectedColor: const Color(0xFF38BDF8),
+                                backgroundColor: const Color(0xFF2C2C44),
+                                labelStyle: TextStyle(color: selected ? Colors.white : Colors.white70, fontSize: 13),
+                                checkmarkColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                side: BorderSide(color: selected ? const Color(0xFF38BDF8) : Colors.white24),
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 32),
+                        ],
+                      ),
+                    ),
+                    // Apply Button
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedGearTypes = List.from(tempGearTypes);
+                              _sortBy = tempSort;
+                            });
+                            Navigator.pop(context);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF38BDF8),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                          child: const Text("Apply Filters", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _sortChip(String label, String value, String current, Function(String) onTap) {
+    final selected = current == value;
+    return GestureDetector(
+      onTap: () => onTap(value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF38BDF8) : const Color(0xFF2C2C44),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: selected ? const Color(0xFF38BDF8) : Colors.white24),
+        ),
+        child: Text(label, style: TextStyle(color: selected ? Colors.white : Colors.white70, fontWeight: selected ? FontWeight.bold : FontWeight.normal, fontSize: 13)),
+      ),
+    );
+  }
+
+  // ── NEW: Search & Filter Bar ──
+  Widget _buildSearchAndFilterBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1E1E),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: TextField(
+                key: const ValueKey('cycle_search_field'),
+                controller: _searchController,
+                focusNode: _searchFocusNode,
+                onChanged: (val) {
+                  _searchQuery.value = val.toLowerCase().trim();
+                },
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                decoration: const InputDecoration(
+                  hintText: 'Search cycles...',
+                  hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
+                  prefixIcon: Icon(Icons.search, color: Colors.grey, size: 20),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: _openFilterSortSheet,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              height: 48, width: 56,
+              decoration: BoxDecoration(
+                color: _activeFilterCount > 0 ? const Color(0xFF38BDF8) : const Color(0xFF1E1E1E),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _activeFilterCount > 0 ? const Color(0xFF38BDF8) : Colors.white24),
+              ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Icon(Icons.tune_rounded, color: _activeFilterCount > 0 ? Colors.white : Colors.white70, size: 22),
+                  if (_activeFilterCount > 0)
+                    Positioned(
+                      top: 6, right: 6,
+                      child: Container(
+                        width: 16, height: 16,
+                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                        child: Center(child: Text('$_activeFilterCount', style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 9, fontWeight: FontWeight.bold))),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── NEW: Active Filter Pills ──
+  Widget _buildActiveFilterPills() {
+    if (_selectedGearTypes.isEmpty && _sortBy == 'default') {
+      return const SizedBox.shrink();
+    }
+
+    final List<Widget> pills = [];
+
+    if (_sortBy != 'default') {
+      final sortLabel = {
+        'price_asc': 'Price ↑',
+        'price_desc': 'Price ↓',
+        'newest': 'Newest',
+      }[_sortBy] ?? '';
+      pills.add(_filterPill(sortLabel, onRemove: () => setState(() => _sortBy = 'default'), color: Colors.purple));
+    }
+
+    for (final gear in _selectedGearTypes) {
+      pills.add(_filterPill(gear, onRemove: () => setState(() => _selectedGearTypes.remove(gear)), color: const Color(0xFF38BDF8)));
+    }
+
+    return Container(
+      height: 36, margin: const EdgeInsets.only(left: 16, right: 16, bottom: 4),
+      child: ListView(scrollDirection: Axis.horizontal, children: pills),
+    );
+  }
+
+  Widget _filterPill(String label, {required VoidCallback onRemove, Color color = const Color(0xFF38BDF8)}) {
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 6),
+          GestureDetector(onTap: onRemove, child: Icon(Icons.close, size: 14, color: color)),
+        ],
+      ),
+    );
   }
 
   @override
@@ -317,76 +627,106 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
 
-      // BODY
+      // BODY — single StreamBuilder for cycles only (no nested booking stream)
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
-            .collection('bookings')
-            .where('userId', isEqualTo: user?.uid)
-            .where('status', whereIn: ['booked', 'started', 'payment_pending'])
+            .collection('cycles')
             .snapshots(),
-        builder: (context, bookingSnapshot) {
-          DocumentSnapshot? activeBooking;
-          if (bookingSnapshot.hasData && bookingSnapshot.data!.docs.isNotEmpty) {
-            final cycleBookings = bookingSnapshot.data!.docs.where((d) {
-              final map = d.data() as Map<String, dynamic>;
-              return map.containsKey('cycleId');
-            }).toList();
-            if (cycleBookings.isNotEmpty) {
-              activeBooking = cycleBookings.first;
-            }
+        builder: (context, cycleSnapshot) {
+          if (cycleSnapshot.hasError) return Center(child: Text("Something went wrong"));
+          if (cycleSnapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator());
+          
+          var docs = cycleSnapshot.data!.docs;
+          
+          // FILTERING LOGIC
+          // 1. Location
+          if (_selectedLocation != "All") {
+            docs = docs.where((d) => d['location'] == _selectedLocation).toList();
           }
 
-          return StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('cycles')
-                .snapshots(),
-            builder: (context, cycleSnapshot) {
-              if (cycleSnapshot.hasError) return Center(child: Text("Something went wrong"));
-              if (cycleSnapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator());
-              
-              var docs = cycleSnapshot.data!.docs;
-              
-              // FILTERING LOGIC
-              // 1. Location
-              if (_selectedLocation != "All") {
-                docs = docs.where((d) => d['location'] == _selectedLocation).toList();
-              }
+          // 2. Active Ride Excl
+          if (_activeBooking != null) {
+             final abMap = _activeBooking!.data() as Map<String, dynamic>?;
+             if (abMap != null && abMap.containsKey('cycleId')) {
+               docs = docs.where((d) => d.id != abMap['cycleId']).toList();
+             }
+          }
 
-              // 2. Active Ride Excl
-              if (activeBooking != null) {
-                 final abMap = activeBooking.data() as Map<String, dynamic>?;
-                 if (abMap != null && abMap.containsKey('cycleId')) {
-                   docs = docs.where((d) => d.id != abMap['cycleId']).toList();
-                 }
-              }
+          // 3. Own Cycles Excl
+          if (user != null) {
+             docs = docs.where((d) {
+                var data = d.data() as Map<String, dynamic>;
+                return data['ownerId'] != user!.uid;
+             }).toList();
+          }
 
-              // 3. Own Cycles Excl
-              if (user != null) {
-                 docs = docs.where((d) {
-                    var data = d.data() as Map<String, dynamic>;
-                    return data['ownerId'] != user!.uid;
-                 }).toList();
-              }
+          // 4. Owner Delist Filter
+          docs = docs.where((d) {
+             var data = d.data() as Map<String, dynamic>;
+             if (data['ownerDisabled'] == true) return false;
+             return true;
+          }).toList();
 
-              // 4. Owner Delist Filter
-              // Uses 'ownerDisabled' field — independent of legacy 'isAvailable' data.
-              // Defaults to false (visible) if field doesn't exist.
-              docs = docs.where((d) {
-                 var data = d.data() as Map<String, dynamic>;
-                 if (data['ownerDisabled'] == true) return false;
-                 return true;
-              }).toList();
+          // 5. Gear Type Filter
+          if (_selectedGearTypes.isNotEmpty) {
+            docs = docs.where((d) {
+              final data = d.data() as Map<String, dynamic>;
+              return _selectedGearTypes.contains(data['gearType']);
+            }).toList();
+          }
+
+          // 6. Sort
+          if (_sortBy == 'price_asc') {
+            docs.sort((a, b) {
+              final ad = a.data() as Map<String, dynamic>;
+              final bd = b.data() as Map<String, dynamic>;
+              return (ad['basePrice'] ?? 0).compareTo(bd['basePrice'] ?? 0);
+            });
+          } else if (_sortBy == 'price_desc') {
+            docs.sort((a, b) {
+              final ad = a.data() as Map<String, dynamic>;
+              final bd = b.data() as Map<String, dynamic>;
+              return (bd['basePrice'] ?? 0).compareTo(ad['basePrice'] ?? 0);
+            });
+          } else if (_sortBy == 'newest') {
+            docs.sort((a, b) {
+              final ad = a.data() as Map<String, dynamic>;
+              final bd = b.data() as Map<String, dynamic>;
+              final at = ad['createdAt']; final bt = bd['createdAt'];
+              if (at == null || bt == null) return 0;
+              return (bt as dynamic).compareTo(at as dynamic);
+            });
+          }
+
+          return ValueListenableBuilder<String>(
+            valueListenable: _searchQuery,
+            builder: (context, searchVal, _) {
+              var filteredDocs = docs;
+              if (searchVal.isNotEmpty) {
+                filteredDocs = docs.where((d) {
+                  final data = d.data() as Map<String, dynamic>;
+                  return (data['modelName'] ?? '').toLowerCase().contains(searchVal) ||
+                      (data['location'] ?? '').toLowerCase().contains(searchVal) ||
+                      (data['ownerName'] ?? '').toLowerCase().contains(searchVal);
+                }).toList();
+              }
 
               return CustomScrollView(
                 slivers: [
                   // 1. Active Ride Card
-                  if (activeBooking != null) 
-                    SliverToBoxAdapter(child: _buildActiveRideCard(context, activeBooking)),
+                  if (_activeBooking != null && _bookingLoaded)
+                    SliverToBoxAdapter(child: _buildActiveRideCard(context, _activeBooking!)),
 
-                  // 2. Time Filter
+                  // 2. Search & Filter Bar
+                  SliverToBoxAdapter(child: _buildSearchAndFilterBar()),
+
+                  // 3. Active Filter Pills
+                  SliverToBoxAdapter(child: _buildActiveFilterPills()),
+
+                  // 4. Time Filter
                   SliverToBoxAdapter(child: _buildTimeFilter()),
 
-                  // 3. Location Chips (Sticky)
+                  // 5. Location Chips (Sticky)
                   SliverPersistentHeader(
                     pinned: true,
                     delegate: _StickyHeaderDelegate(
@@ -429,8 +769,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
 
-                  // 4. Cycle List
-                  if (docs.isEmpty)
+                  // 6. Cycle List
+                  if (filteredDocs.isEmpty)
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: EdgeInsets.only(top: 50),
@@ -439,7 +779,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             children: [
                               Icon(Icons.directions_bike, size: 50, color: Colors.grey),
                               SizedBox(height: 10),
-                              Text("No cycles available here.", style: TextStyle(color: Colors.grey)),
+                              Text(searchVal.isNotEmpty ? 'No cycles match "$searchVal"' : "No cycles available here.", style: TextStyle(color: Colors.grey)),
+                              if (_activeFilterCount > 0) ...[
+                                SizedBox(height: 12),
+                                TextButton(
+                                  onPressed: () => setState(() { _selectedGearTypes.clear(); _sortBy = 'default'; }),
+                                  child: const Text("Clear Filters", style: TextStyle(color: Color(0xFF38BDF8))),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -449,8 +796,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     SliverList(
                       delegate: SliverChildBuilderDelegate(
                         (context, index) {
-                          var data = docs[index].data() as Map<String, dynamic>;
-                          String cycleId = docs[index].id;
+                          var data = filteredDocs[index].data() as Map<String, dynamic>;
+                          String cycleId = filteredDocs[index].id;
                           
                           // Dynamic Price Calc
                           double? dynamicTotal;
@@ -470,7 +817,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                           return _buildCycleCard(context, data, cycleId, totalPrice: dynamicTotal);
                         },
-                        childCount: docs.length,
+                        childCount: filteredDocs.length,
                       ),
                     ),
                     
@@ -478,7 +825,7 @@ class _HomeScreenState extends State<HomeScreen> {
                    SliverPadding(padding: EdgeInsets.only(bottom: 100))
                 ],
               );
-            }
+            },
           );
         }
       ),
@@ -1018,59 +1365,42 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (pickedTime == null) return;
 
-      DateTime pickedDateTime = DateTime(
-        pickedDate.year, 
-        pickedDate.month, 
-        pickedDate.day, 
-        pickedTime.hour, 
-        pickedTime.minute
+      DateTime newDateTime = DateTime(
+        pickedDate.year, pickedDate.month, pickedDate.day,
+        pickedTime.hour, pickedTime.minute,
       );
 
       setState(() {
-         if (isStart) {
-            _selectedStartTime = pickedDateTime;
-            if (_selectedEndTime != null && _selectedEndTime!.isBefore(_selectedStartTime!)) {
-                _selectedEndTime = _selectedStartTime!.add(Duration(hours: 2));
-            }
-         } else {
-            _selectedEndTime = pickedDateTime;
-         }
+        if (isStart) {
+          _selectedStartTime = newDateTime;
+          if (_selectedEndTime != null && _selectedEndTime!.isBefore(_selectedStartTime!)) {
+            _selectedEndTime = _selectedStartTime!.add(Duration(hours: 2));
+          }
+        } else {
+          _selectedEndTime = newDateTime;
+          if (_selectedStartTime != null && _selectedEndTime!.isBefore(_selectedStartTime!)) {
+            _selectedEndTime = _selectedStartTime!.add(Duration(hours: 2));
+          }
+        }
       });
   }
 
-  Widget _buildTimePill(String label, DateTime? time, VoidCallback onTap) {
-    bool isSelected = time != null;
+  Widget _buildTimePill(String label, DateTime? dateTime, VoidCallback onTap) {
+    String displayText = dateTime != null ? DateFormat('h:mm a\nMMM d').format(dateTime) : "Select";
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+        padding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.blueAccent.withOpacity(0.1) : Colors.black26, 
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isSelected ? Colors.blueAccent : Colors.white10)
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white24),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: TextStyle(color: Colors.grey, fontSize: 10)),
+            Text(label, style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
             SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(Icons.access_time, size: 14, color: isSelected ? Colors.blueAccent : Colors.white70),
-                SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    time != null ? DateFormat('MMM d, h:mm a').format(time) : "-- : --", 
-                    style: TextStyle(
-                      color: isSelected ? Colors.white : Colors.white60, 
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                      fontSize: 13
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
+            Text(displayText, textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
@@ -1078,27 +1408,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+// Sticky Header Delegate
 class _StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
-
   _StickyHeaderDelegate({required this.child});
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return Container(
-      color: Theme.of(context).scaffoldBackgroundColor, // Ensure background is opaque
-      child: child,
-    );
-  }
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => child;
 
   @override
-  double get maxExtent => 60.0; // Height of the location bar
+  double get maxExtent => 60;
 
   @override
-  double get minExtent => 60.0;
+  double get minExtent => 60;
 
   @override
-  bool shouldRebuild(covariant _StickyHeaderDelegate oldDelegate) {
-    return oldDelegate.child != child;
-  }
+  bool shouldRebuild(_StickyHeaderDelegate oldDelegate) => oldDelegate.child != child;
 }
