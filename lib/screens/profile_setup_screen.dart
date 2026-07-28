@@ -74,8 +74,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       if (!mounted) return;
 
       if (widget.isEditing) {
-        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile Updated!"), backgroundColor: kSurface1));
+        Navigator.pop(context);
       } else {
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomeScreen()));
       }

@@ -76,29 +76,54 @@ class MyListingsScreen extends StatelessWidget {
             final bTime = bData['createdAt'] != null ? (bData['createdAt'] as Timestamp).toDate() : DateTime(2000);
             return bTime.compareTo(aTime);
           });
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
-            final cycleId = docs[index].id;
-            final bool ownerDisabled = data['ownerDisabled'] ?? false;
-            return _listingCard(
-              context: context,
-              imageUrl: data['imageUrl'] ?? '',
-              title: "${data['modelName']} – ${data['gearType'] ?? 'Single Geared'}",
-              subtitle: "₹${data['basePrice']} / 2hrs  •  ${data['location']}",
-              ownerDisabled: ownerDisabled,
-              isSold: false,
-              onToggle: (val) => FirebaseFirestore.instance.collection('cycles').doc(cycleId).update({'ownerDisabled': !val}),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CycleHistoryScreen(cycleId: cycleId, cycleData: data))),
-              actions: [
-                _actionBtn(icon: Icons.comment_outlined, label: "Reviews", color: kAccentAmber, onTap: () => _showReviews(context, cycleId, isItem: false)),
-                _actionBtn(icon: Icons.edit_outlined, label: "Edit", color: kAccentCyan, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddCycleScreen(cycleData: data, cycleId: cycleId)))),
-                _actionBtn(icon: Icons.delete_outline, label: "Delete", color: kAccentRed, onTap: () => _confirmDelete(context, cycleId, collection: 'cycles')),
-              ],
-            );
-          },
+        return Column(
+          children: [
+            // Add cycle button at the top
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddCycleScreen())),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text("List a New Cycle", style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kAccentCyan,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: docs.length,
+                itemBuilder: (context, index) {
+                  final data = docs[index].data() as Map<String, dynamic>;
+                  final cycleId = docs[index].id;
+                  final bool ownerDisabled = data['ownerDisabled'] ?? false;
+                  return _listingCard(
+                    context: context,
+                    imageUrl: data['imageUrl'] ?? '',
+                    title: "${data['modelName']} – ${data['gearType'] ?? 'Single Geared'}",
+                    subtitle: "₹${data['basePrice']} / 2hrs  •  ${data['location']}",
+                    ownerDisabled: ownerDisabled,
+                    isSold: false,
+                    onToggle: (val) => FirebaseFirestore.instance.collection('cycles').doc(cycleId).update({'ownerDisabled': !val}),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CycleHistoryScreen(cycleId: cycleId, cycleData: data))),
+                    actions: [
+                      _actionBtn(icon: Icons.comment_outlined, label: "Reviews", color: kAccentAmber, onTap: () => _showReviews(context, cycleId, isItem: false)),
+                      _actionBtn(icon: Icons.edit_outlined, label: "Edit", color: kAccentCyan, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddCycleScreen(cycleData: data, cycleId: cycleId)))),
+                      _actionBtn(icon: Icons.delete_outline, label: "Delete", color: kAccentRed, onTap: () => _confirmDelete(context, cycleId, collection: 'cycles')),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );

@@ -118,8 +118,8 @@ class _RootRouterState extends State<_RootRouter> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Image.asset('assets/images/rentx_logo_new.png', height: 90,
-                    errorBuilder: (e, s, t) => const Icon(Icons.bolt, size: 60, color: Colors.white)),
+                  Image.asset('assets/images/rentx_logo_new.png', height: 117,
+                    errorBuilder: (e, s, t) => const Icon(Icons.bolt, size: 78, color: Colors.white)),
                   const SizedBox(height: 32),
                   const Text(
                     "Update Required",
@@ -167,8 +167,8 @@ class _RootRouterState extends State<_RootRouter> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset('assets/images/rentx_logo_new.png', height: 90,
-                errorBuilder: (e, s, t) => Image.asset('assets/images/RentX_logo.png', height: 90)),
+              Image.asset('assets/images/rentx_logo_new.png', height: 117,
+                errorBuilder: (e, s, t) => Image.asset('assets/images/RentX_logo.png', height: 117)),
               const SizedBox(height: 24),
               const CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
             ],
@@ -188,8 +188,8 @@ class _RootRouterState extends State<_RootRouter> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Image.asset('assets/images/rentx_logo_new.png', height: 90,
-                    errorBuilder: (e, s, t) => Image.asset('assets/images/RentX_logo.png', height: 90)),
+                  Image.asset('assets/images/rentx_logo_new.png', height: 117,
+                    errorBuilder: (e, s, t) => Image.asset('assets/images/RentX_logo.png', height: 117)),
                   const SizedBox(height: 24),
                   const CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                 ],

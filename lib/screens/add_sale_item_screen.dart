@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
@@ -284,6 +285,7 @@ class _AddSaleItemScreenState extends State<AddSaleItemScreen> {
                   TextFormField(
                     initialValue: price.toString(),
                     keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
                     style: const TextStyle(color: kTextPrimary),
                     decoration: rentXInputDecoration("Asking Price (₹)", hint: "e.g., 500"),
                     validator: (v) => int.tryParse(v ?? '') == null ? "Invalid price" : null,

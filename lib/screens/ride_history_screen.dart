@@ -39,7 +39,6 @@ class RideHistoryScreen extends StatelessWidget {
         stream: FirebaseFirestore.instance
             .collection('bookings')
             .where('userId', isEqualTo: user?.uid)
-            .orderBy('createdAt', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -57,7 +56,14 @@ class RideHistoryScreen extends StatelessWidget {
             );
           }
 
-          var docs = snapshot.data!.docs;
+          var docs = snapshot.data!.docs.toList()
+            ..sort((a, b) {
+              final aData = a.data() as Map<String, dynamic>;
+              final bData = b.data() as Map<String, dynamic>;
+              final aTime = aData['createdAt'] != null ? (aData['createdAt'] as Timestamp).toDate() : DateTime(2000);
+              final bTime = bData['createdAt'] != null ? (bData['createdAt'] as Timestamp).toDate() : DateTime(2000);
+              return bTime.compareTo(aTime);
+            });
 
           return ListView.builder(
             padding: const EdgeInsets.all(16),

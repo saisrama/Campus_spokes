@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_theme.dart';
@@ -150,6 +151,7 @@ class _AddItemRequestScreenState extends State<AddItemRequestScreen> {
                   TextFormField(
                     style: const TextStyle(color: kTextPrimary),
                     keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
                     decoration: rentXInputDecoration(
                       _isRent ? "Max Budget (₹ / 2 hrs)" : "Max Budget (₹)",
                       hint: "e.g. 50",

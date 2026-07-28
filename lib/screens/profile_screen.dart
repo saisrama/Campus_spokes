@@ -41,7 +41,7 @@ class ProfileScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         children: [
-          // PROFILE HEADER CARD (COMPACT HORIZONTAL)
+          // PROFILE HEADER CARD
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
@@ -346,6 +346,44 @@ class ProfileScreen extends StatelessWidget {
               "The trade, listing, rental, sale, or exchange of narcotics, alcohol, tobacco, weapons, prescription medications, "
               "or any illicit/prohibited substances is strictly prohibited on RentX. "
               "Engaging in or attempting any such activity will result in immediate termination of account access and direct reporting of all involved users and details to the college administration and relevant legal authorities.",
+            ),
+            _termsSection(
+              "9. Pricing & Billing for Rentals",
+              "All rental charges are calculated based on the listed base price (first 2 hours) and hourly rate (after 2 hours) as set by the owner. "
+              "Renters agree to pay the full calculated amount for the actual time the item/cycle is in their possession. "
+              "The owner determines the total cost at the end of the ride based on real duration. "
+              "All payments are settled directly between users via UPI or cash. RentX does not process or handle any payments.",
+            ),
+            _termsSection(
+              "10. Late Fee & Overtime Charges",
+              "If a renter returns the cycle/item later than the scheduled end time: "
+              "An overtime charge of double (2x) the standard hourly rate will apply for every additional hour beyond the scheduled end time. "
+              "No other penalties apply. Persistent late returns may result in account suspension.",
+            ),
+            _termsSection(
+              "11. No-Show Policy",
+              "A renter is considered a 'No-Show' if the current time has passed the scheduled end time of the booking and the ride/session has NOT been started (status remains 'booked'). "
+              "In such cases: (a) The booking will be automatically marked as No-Show, (b) The renter will be charged the FULL estimated booking amount (100% of the cost), "
+              "(c) The owner reserves the right to re-list the item/cycle immediately. Repeated no-shows will lead to account restrictions.",
+            ),
+            _termsSection(
+              "12. Cancellation Policy",
+              "(a) Renter (Student): Cancellations are allowed only up to 1 hour before the scheduled start time of the ride/session. "
+              "If cancelled more than 1 hour before the scheduled start, a 50% cancellation fee of the estimated cost will be charged. "
+              "Cancellations within 1 hour of the scheduled start time are NOT permitted. "
+              "(b) Owner: If the owner cancels a booking that has not yet started, no charge applies to either party. "
+              "If the owner fails to hand over the item at the scheduled time, the owner may be liable for a penalty. "
+              "(c) If the owner ends a ride early, the cost is calculated only for the duration used. "
+              "(d) Owner-cancelled bookings during 'booked' status result in no charge to the renter.",
+            ),
+            _termsSection(
+              "13. Damage, Theft & Liability",
+              "(a) The renter is fully responsible for the item/cycle from the moment of pick-up until return. "
+              "Any damage, theft, or loss during this period is the renter's sole responsibility. "
+              "(b) The renter agrees to compensate the owner for any damages. The amount shall be mutually decided between the parties. "
+              "RentX does not mediate or guarantee compensation. "
+              "(c) Owners are advised to inspect the item/cycle thoroughly before and after each rental. "
+              "(d) RentX is not liable for any disputes, damages, theft, loss, or injury arising from any rental or transaction.",
             ),
             const SizedBox(height: 16),
             Container(

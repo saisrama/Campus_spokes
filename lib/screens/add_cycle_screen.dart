@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
@@ -292,6 +293,7 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
                     Expanded(child: TextFormField(
                       initialValue: basePrice.toString(),
                       keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
                       style: const TextStyle(color: kTextPrimary),
                       decoration: rentXInputDecoration("Base Price (₹)", hint: "First 2 hrs"),
                       validator: (v) {
@@ -305,6 +307,7 @@ class _AddCycleScreenState extends State<AddCycleScreen> {
                     Expanded(child: TextFormField(
                       initialValue: hourlyPrice.toString(),
                       keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
                       style: const TextStyle(color: kTextPrimary),
                       decoration: rentXInputDecoration("Hourly Rate (₹)", hint: "After 2 hrs"),
                       validator: (v) {

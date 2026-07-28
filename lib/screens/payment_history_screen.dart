@@ -46,7 +46,6 @@ class PaymentHistoryScreen extends StatelessWidget {
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('bookings')
-                  .orderBy('createdAt', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -59,7 +58,14 @@ class PaymentHistoryScreen extends StatelessWidget {
                   return rentXEmptyState(icon: Icons.receipt_long_outlined, message: "No transactions yet", subMessage: "Completed rides will appear here.");
                 }
 
-                final allDocs = snapshot.data!.docs;
+                final allDocs = snapshot.data!.docs.toList()
+                  ..sort((a, b) {
+                    final aData = a.data() as Map<String, dynamic>;
+                    final bData = b.data() as Map<String, dynamic>;
+                    final aTime = aData['createdAt'] != null ? (aData['createdAt'] as Timestamp).toDate() : DateTime(2000);
+                    final bTime = bData['createdAt'] != null ? (bData['createdAt'] as Timestamp).toDate() : DateTime(2000);
+                    return bTime.compareTo(aTime);
+                  });
                 final myTransactions = allDocs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
                   final String status = data['status'] ?? '';

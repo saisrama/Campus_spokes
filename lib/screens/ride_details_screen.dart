@@ -406,35 +406,13 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
             // ACTION BUTTON (OWNER & RENTER CANCEL)
             if (_status == 'booked') ...[
               const SizedBox(height: 30),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.redAccent,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  icon: _isProcessing 
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : Icon(_status == 'started' ? Icons.stop_circle : Icons.cancel, color: Colors.white),
-                  label: Text(
-                    isOwnerViewing 
-                        ? (_status == 'started' ? "END RIDE" : "CANCEL BOOKING (NO CHARGE)")
-                        : "CANCEL BOOKING (50% Fee)",
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  onPressed: _isProcessing ? null : () {
-                    if (isOwnerViewing) {
-                      if (_status == 'started') {
-                        _ownerEndRide();
-                      } else {
-                        _ownerCancelBooking();
-                      }
-                    } else {
-                      _renterCancelBooking();
-                    }
-                  },
-                ),
+              _CancellationCheck(
+                booking: widget.booking,
+                isOwnerViewing: isOwnerViewing,
+                isProcessing: _isProcessing,
+                onOwnerCancel: _ownerCancelBooking,
+                onOwnerEndRide: _ownerEndRide,
+                onRenterCancel: _renterCancelBooking,
               ),
             ],
 
@@ -446,6 +424,22 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
   }
 
   Future<void> _renterCancelBooking() async {
+    // Check if within 1-hour window
+    if (widget.booking['scheduledStartTime'] != null) {
+      final scheduledStart = (widget.booking['scheduledStartTime'] as Timestamp).toDate();
+      final oneHourBefore = scheduledStart.subtract(const Duration(hours: 1));
+      if (DateTime.now().isAfter(oneHourBefore)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Cancellation not allowed less than 1 hour before the scheduled ride."),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+        return;
+      }
+    }
     double estimatedCost = 0.0;
     if (widget.booking['estimatedCost'] != null) {
       estimatedCost = (widget.booking['estimatedCost'] as num).toDouble();
@@ -598,5 +592,69 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
           child: Center(child: Icon(Icons.error, size: iconSize, color: Colors.white24)),
         );
      }
+  }
+}
+
+class _CancellationCheck extends StatelessWidget {
+  final Map<String, dynamic> booking;
+  final bool isOwnerViewing;
+  final bool isProcessing;
+  final VoidCallback onOwnerCancel;
+  final VoidCallback onOwnerEndRide;
+  final VoidCallback onRenterCancel;
+
+  const _CancellationCheck({
+    required this.booking,
+    required this.isOwnerViewing,
+    required this.isProcessing,
+    required this.onOwnerCancel,
+    required this.onOwnerEndRide,
+    required this.onRenterCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    bool withinOneHour = false;
+    if (booking['scheduledStartTime'] != null) {
+      final scheduledStart = (booking['scheduledStartTime'] as Timestamp).toDate();
+      final oneHourBefore = scheduledStart.subtract(const Duration(hours: 1));
+      withinOneHour = DateTime.now().isAfter(oneHourBefore);
+    }
+
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.redAccent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        icon: isProcessing
+          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+          : const Icon(Icons.cancel, color: Colors.white),
+        label: Text(
+          isOwnerViewing
+              ? "CANCEL BOOKING (NO CHARGE)"
+              : withinOneHour
+                  ? "CANCELLATION RESTRICTED"
+                  : "CANCEL BOOKING (50% Fee)",
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        onPressed: isProcessing
+            ? null
+            : (isOwnerViewing
+                ? onOwnerCancel
+                : (withinOneHour
+                    ? () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Cancellation not allowed less than 1 hour before the scheduled ride."),
+                            backgroundColor: Colors.redAccent,
+                          ),
+                        );
+                      }
+                    : onRenterCancel)),
+      ),
+    );
   }
 }

@@ -340,14 +340,30 @@ class _ItemRequestsScreenState extends State<ItemRequestsScreen> with SingleTick
   }
 
   Widget _buildMyRequests() {
+    if (user == null) {
+      return rentXEmptyState(
+        icon: Icons.account_circle_outlined,
+        message: "Not logged in",
+        subMessage: "Please log in to see your requests.",
+      );
+    }
+
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('item_requests')
-          .where('userId', isEqualTo: user?.uid)
-          .orderBy('createdAt', descending: true)
+          .where('userId', isEqualTo: user!.uid)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: kTextPrimary, strokeWidth: 2));
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: kTextPrimary, strokeWidth: 2));
+        }
+        if (snapshot.hasError) {
+          return rentXEmptyState(
+            icon: Icons.error_outline,
+            message: "Could not load your requests",
+            subMessage: "Please check your connection and try again.",
+          );
+        }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return rentXEmptyState(
             icon: Icons.post_add,
@@ -356,12 +372,21 @@ class _ItemRequestsScreenState extends State<ItemRequestsScreen> with SingleTick
           );
         }
 
+        final docs = snapshot.data!.docs.toList()
+          ..sort((a, b) {
+            final aData = a.data() as Map<String, dynamic>;
+            final bData = b.data() as Map<String, dynamic>;
+            final aTime = aData['createdAt'] != null ? (aData['createdAt'] as Timestamp).toDate() : DateTime(2000);
+            final bTime = bData['createdAt'] != null ? (bData['createdAt'] as Timestamp).toDate() : DateTime(2000);
+            return bTime.compareTo(aTime);
+          });
+
         return ListView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: snapshot.data!.docs.length,
+          itemCount: docs.length,
           itemBuilder: (context, index) {
-            final req = snapshot.data!.docs[index].data() as Map<String, dynamic>;
-            final reqId = snapshot.data!.docs[index].id;
+            final req = docs[index].data() as Map<String, dynamic>;
+            final reqId = docs[index].id;
             final isRent = req['requestType'] == 'rent';
             final upvotedBy = (req['upvotedBy'] is List) ? List<String>.from(req['upvotedBy']) : <String>[];
 

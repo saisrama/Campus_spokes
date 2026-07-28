@@ -39,6 +39,8 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   String? _bookingStatus = 'none';
   DateTime? _scheduledStartTime;
   DateTime? _scheduledEndTime;
+  bool _isCancellation = false;
+  double? _cancellationFee;
 
   final TextEditingController _reviewController = TextEditingController();
   int _selectedRating = 5;
@@ -99,6 +101,8 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
         if (data['scheduledEndTime'] != null) {
           _scheduledEndTime = (data['scheduledEndTime'] as Timestamp).toDate();
         }
+        _isCancellation = data['isCancellation'] ?? false;
+        _cancellationFee = (data['cancellationFee'] is num) ? (data['cancellationFee'] as num).toDouble() : null;
       });
     }
   }
@@ -843,7 +847,15 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                           : (_bookingStatus == 'booked' ? "START RENTAL SESSION" : (_bookingStatus == 'started' ? "END RENTAL & PAY" : "PAYMENT PENDING")),
                       onTap: _bookingStatus == 'none'
                           ? _showBookingConfirmationDialog
-                          : null,
+                          : (_bookingStatus == 'payment_pending'
+                              ? () {
+                                  if (_isCancellation) {
+                                    _showPaymentDialog(isCancellation: true, cancelAmount: _cancellationFee);
+                                  } else {
+                                    _showPaymentDialog();
+                                  }
+                                }
+                              : null),
                       icon: Icons.check_circle_outline,
                     ),
                     if (_bookingStatus == 'booked') ...[

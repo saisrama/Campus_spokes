@@ -41,6 +41,8 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
   DateTime? _scheduledStartTime;
   DateTime? _scheduledEndTime;
   bool _isNoShow = false;
+  bool _isCancellation = false;
+  double? _cancellationFee;
 
   int _currentImageIndex = 0;
   final PageController _pageController = PageController();
@@ -136,6 +138,8 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
             _scheduledStartTime = scheduledStartX;
             _scheduledEndTime = scheduledEndX;
             _isNoShow = isNoShowDoc;
+            _isCancellation = data['isCancellation'] ?? false;
+            _cancellationFee = (data['cancellationFee'] is num) ? (data['cancellationFee'] as num).toDouble() : null;
 
             if (scheduledStartX != null) _startTime = scheduledStartX;
             if (scheduledEndX != null) _endTime = scheduledEndX;
@@ -774,7 +778,15 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                       ? _showBookingConfirmationDialog
                       : (_bookingStatus == 'booked'
                           ? _startRide
-                          : (_bookingStatus == 'started' ? _endRide : (_bookingStatus == 'payment_pending' ? _showPaymentDialog : null))),
+                          : (_bookingStatus == 'started' ? _endRide : (_bookingStatus == 'payment_pending'
+                              ? () {
+                                  if (_isCancellation) {
+                                    _showPaymentDialog(isCancellation: true, cancelAmount: _cancellationFee);
+                                  } else {
+                                    _showPaymentDialog();
+                                  }
+                                }
+                              : null))),
                   icon: Icons.pedal_bike,
                 ),
                 if (_bookingStatus == 'booked') ...[
@@ -907,6 +919,20 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
 
   Future<void> _cancelBooking() async {
     if (_bookingId == null) return;
+
+    // Check if cancellation is allowed (must be more than 1 hour before scheduled start)
+    if (_scheduledStartTime != null && DateTime.now().isAfter(_scheduledStartTime!.subtract(const Duration(hours: 1)))) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Cancellation not allowed less than 1 hour before the scheduled start time."),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+      return;
+    }
+
     double cancellationFee = _totalCost * 0.5;
 
     bool? confirm = await showDialog<bool>(
