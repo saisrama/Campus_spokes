@@ -158,32 +158,56 @@ class MyListingsScreen extends StatelessWidget {
             final bTime = bData['createdAt'] != null ? (bData['createdAt'] as Timestamp).toDate() : DateTime(2000);
             return bTime.compareTo(aTime);
           });
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
-            final itemId = docs[index].id;
-            final bool ownerDisabled = data['ownerDisabled'] ?? false;
-            final String itemName = data['itemName'] ?? 'Item';
-            final String itemType = data['itemType'] ?? 'General';
-            final String location = data['location'] ?? 'Campus';
-            return _listingCard(
-              context: context,
-              imageUrl: data['imageUrl'] ?? '',
-              title: "$itemName – $itemType",
-              subtitle: "₹${data['basePrice']} / 2hrs  •  Collect: $location Bhavan",
-              ownerDisabled: ownerDisabled,
-              isSold: false,
-              onToggle: (val) => FirebaseFirestore.instance.collection('items').doc(itemId).update({'ownerDisabled': !val}),
-              onTap: null,
-              actions: [
-                _actionBtn(icon: Icons.comment_outlined, label: "Reviews", color: kAccentAmber, onTap: () => _showReviews(context, itemId, isItem: true)),
-                _actionBtn(icon: Icons.edit_outlined, label: "Edit", color: kAccentCyan, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddItemScreen(itemData: data, itemId: itemId)))),
-                _actionBtn(icon: Icons.delete_outline, label: "Delete", color: kAccentRed, onTap: () => _confirmDelete(context, itemId, collection: 'items')),
-              ],
-            );
-          },
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddItemScreen())),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text("List a New Item", style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kAccentViolet,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: docs.length,
+                itemBuilder: (context, index) {
+                  final data = docs[index].data() as Map<String, dynamic>;
+                  final itemId = docs[index].id;
+                  final bool ownerDisabled = data['ownerDisabled'] ?? false;
+                  final String itemName = data['itemName'] ?? 'Item';
+                  final String itemType = data['itemType'] ?? 'General';
+                  final String location = data['location'] ?? 'Campus';
+                  return _listingCard(
+                    context: context,
+                    imageUrl: data['imageUrl'] ?? '',
+                    title: "$itemName – $itemType",
+                    subtitle: "₹${data['basePrice']} / 2hrs  •  Collect: $location Bhavan",
+                    ownerDisabled: ownerDisabled,
+                    isSold: false,
+                    onToggle: (val) => FirebaseFirestore.instance.collection('items').doc(itemId).update({'ownerDisabled': !val}),
+                    onTap: null,
+                    actions: [
+                      _actionBtn(icon: Icons.comment_outlined, label: "Reviews", color: kAccentAmber, onTap: () => _showReviews(context, itemId, isItem: true)),
+                      _actionBtn(icon: Icons.edit_outlined, label: "Edit", color: kAccentCyan, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddItemScreen(itemData: data, itemId: itemId)))),
+                      _actionBtn(icon: Icons.delete_outline, label: "Delete", color: kAccentRed, onTap: () => _confirmDelete(context, itemId, collection: 'items')),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );
@@ -218,38 +242,62 @@ class MyListingsScreen extends StatelessWidget {
             final bTime = bData['createdAt'] != null ? (bData['createdAt'] as Timestamp).toDate() : DateTime(2000);
             return bTime.compareTo(aTime);
           });
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
-            final itemId = docs[index].id;
-            final bool ownerDisabled = data['ownerDisabled'] ?? false;
-            final bool isSold = data['isSold'] ?? false;
-            final String itemName = data['itemName'] ?? 'Item';
-            final String itemType = data['itemType'] ?? 'General';
-            final int price = data['price'] ?? 0;
-            return _listingCard(
-              context: context,
-              imageUrl: data['imageUrl'] ?? '',
-              title: "$itemName – $itemType",
-              subtitle: "₹$price  •  Condition: ${data['condition'] ?? 'Good'}",
-              ownerDisabled: ownerDisabled,
-              isSold: isSold,
-              onToggle: (val) => FirebaseFirestore.instance.collection('sale_items').doc(itemId).update({'ownerDisabled': !val}),
-              onTap: null,
-              actions: [
-                _actionBtn(
-                  icon: isSold ? Icons.undo_rounded : Icons.check_circle_outline,
-                  label: isSold ? "Available" : "Mark Sold",
-                  color: isSold ? kTextMuted : kAccentGreen,
-                  onTap: () => FirebaseFirestore.instance.collection('sale_items').doc(itemId).update({'isSold': !isSold}),
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddSaleItemScreen())),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text("Sell a New Item", style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kAccentOrange,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
                 ),
-                _actionBtn(icon: Icons.edit_outlined, label: "Edit", color: kAccentCyan, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddSaleItemScreen(itemData: data, itemId: itemId)))),
-                _actionBtn(icon: Icons.delete_outline, label: "Delete", color: kAccentRed, onTap: () => _confirmDelete(context, itemId, collection: 'sale_items')),
-              ],
-            );
-          },
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: docs.length,
+                itemBuilder: (context, index) {
+                  final data = docs[index].data() as Map<String, dynamic>;
+                  final itemId = docs[index].id;
+                  final bool ownerDisabled = data['ownerDisabled'] ?? false;
+                  final bool isSold = data['isSold'] ?? false;
+                  final String itemName = data['itemName'] ?? 'Item';
+                  final String itemType = data['itemType'] ?? 'General';
+                  final int price = data['price'] ?? 0;
+                  return _listingCard(
+                    context: context,
+                    imageUrl: data['imageUrl'] ?? '',
+                    title: "$itemName – $itemType",
+                    subtitle: "₹$price  •  Condition: ${data['condition'] ?? 'Good'}",
+                    ownerDisabled: ownerDisabled,
+                    isSold: isSold,
+                    onToggle: (val) => FirebaseFirestore.instance.collection('sale_items').doc(itemId).update({'ownerDisabled': !val}),
+                    onTap: null,
+                    actions: [
+                      _actionBtn(
+                        icon: isSold ? Icons.undo_rounded : Icons.check_circle_outline,
+                        label: isSold ? "Available" : "Mark Sold",
+                        color: isSold ? kTextMuted : kAccentGreen,
+                        onTap: () => FirebaseFirestore.instance.collection('sale_items').doc(itemId).update({'isSold': !isSold}),
+                      ),
+                      _actionBtn(icon: Icons.edit_outlined, label: "Edit", color: kAccentCyan, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddSaleItemScreen(itemData: data, itemId: itemId)))),
+                      _actionBtn(icon: Icons.delete_outline, label: "Delete", color: kAccentRed, onTap: () => _confirmDelete(context, itemId, collection: 'sale_items')),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );

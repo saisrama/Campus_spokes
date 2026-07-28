@@ -177,28 +177,30 @@ class _RootRouterState extends State<_RootRouter> {
       );
     }
 
-    // Normal auth stream
+    // Normal auth stream — no loading state to avoid double flash
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Scaffold(
-            backgroundColor: const Color(0xFF000000),
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Image.asset('assets/images/rentx_logo_new.png', height: 117,
-                    errorBuilder: (e, s, t) => Image.asset('assets/images/RentX_logo.png', height: 117)),
-                  const SizedBox(height: 24),
-                  const CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                ],
-              ),
-            ),
-          );
-        }
         if (snapshot.hasData) return LandingScreen();
-        return LoginScreen();
+        // Only show login if we've confirmed no user (avoid flash during init)
+        if (snapshot.connectionState == ConnectionState.active && !snapshot.hasData) {
+          return LoginScreen();
+        }
+        // Brief loading only if update check is done but auth is still resolving
+        return Scaffold(
+          backgroundColor: const Color(0xFF000000),
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset('assets/images/rentx_logo_new.png', height: 117,
+                  errorBuilder: (e, s, t) => Image.asset('assets/images/RentX_logo.png', height: 117)),
+                const SizedBox(height: 24),
+                const CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+              ],
+            ),
+          ),
+        );
       },
     );
   }

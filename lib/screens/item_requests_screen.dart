@@ -316,26 +316,92 @@ class _ItemRequestsScreenState extends State<ItemRequestsScreen> with SingleTick
           _buildMyRequests(),
         ],
       ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionButton.extended(
-            heroTag: 'rent_req',
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddItemRequestScreen(requestType: 'rent'))),
-            label: const Text("Request to Rent", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
-            icon: const Icon(Icons.add, color: Colors.black),
-            backgroundColor: kAccentCyan,
-          ),
-          const SizedBox(height: 10),
-          FloatingActionButton.extended(
-            heroTag: 'buy_req',
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddItemRequestScreen(requestType: 'buy'))),
-            label: const Text("Request to Buy", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
-            icon: const Icon(Icons.add, color: Colors.black),
-            backgroundColor: kAccentOrange,
-          ),
-        ],
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'request_fab',
+        onPressed: () => _showRequestOptions(context),
+        label: const Text("Post a Request", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
+        icon: const Icon(Icons.add, color: Colors.black),
+        backgroundColor: kTextPrimary,
       ),
+    );
+  }
+
+  void _showRequestOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: kSurface1,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+          decoration: BoxDecoration(
+            color: kSurface1,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border.all(color: kBorder),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36, height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(color: kBorder, borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              const Text("Create a Request", style: TextStyle(color: kTextPrimary, fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
+              const SizedBox(height: 4),
+              const Text("Looking for something specific on campus?", style: TextStyle(color: kTextMuted, fontSize: 13)),
+              const SizedBox(height: 20),
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                tileColor: kSurface2,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: kAccentCyan.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.inventory_2_outlined, color: kAccentCyan),
+                ),
+                title: const Text("Request to Rent", style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
+                subtitle: const Text("Post an item you'd like to borrow", style: TextStyle(color: kTextMuted, fontSize: 12)),
+                trailing: const Icon(Icons.chevron_right, color: kTextMuted),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const AddItemRequestScreen(requestType: 'rent')));
+                },
+              ),
+              const SizedBox(height: 10),
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                tileColor: kSurface2,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: kAccentOrange.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.shopping_bag_outlined, color: kAccentOrange),
+                ),
+                title: const Text("Request to Buy", style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold)),
+                subtitle: const Text("Post something you want to purchase", style: TextStyle(color: kTextMuted, fontSize: 12)),
+                trailing: const Icon(Icons.chevron_right, color: kTextMuted),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const AddItemRequestScreen(requestType: 'buy')));
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        );
+      },
     );
   }
 

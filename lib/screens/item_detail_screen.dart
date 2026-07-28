@@ -791,43 +791,52 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                     rentXCard(
                       child: Column(
                         children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: InkWell(
-                                  onTap: () => _selectTime(true),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text("START TIME", style: TextStyle(color: kTextDim, fontSize: 10, fontWeight: FontWeight.bold)),
-                                      const SizedBox(height: 4),
-                                      Text(DateFormat('h:mm a').format(_startTime), style: const TextStyle(color: kTextPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              Container(height: 30, width: 1, color: kBorder),
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.only(left: 16),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(
+                              children: [
+                                Expanded(
                                   child: InkWell(
-                                    onTap: () => _selectTime(false),
+                                    onTap: () => _selectTime(true),
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        const Text("END TIME", style: TextStyle(color: kTextDim, fontSize: 10, fontWeight: FontWeight.bold)),
-                                        const SizedBox(height: 4),
-                                        Text(DateFormat('h:mm a').format(_endTime), style: const TextStyle(color: kTextPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+                                        const Text("START TIME", style: TextStyle(color: kTextDim, fontSize: 10, fontWeight: FontWeight.bold)),
+                                        const SizedBox(height: 6),
+                                        Text(DateFormat('h:mm a').format(_startTime), style: const TextStyle(color: kTextPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
                                       ],
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  child: Container(height: 40, width: 1, color: kBorder),
+                                ),
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(left: 16),
+                                    child: InkWell(
+                                      onTap: () => _selectTime(false),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text("END TIME", style: TextStyle(color: kTextDim, fontSize: 10, fontWeight: FontWeight.bold)),
+                                          const SizedBox(height: 6),
+                                          Text(DateFormat('h:mm a').format(_endTime), style: const TextStyle(color: kTextPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          rentXDivider(),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 4),
+                            child: Divider(color: kBorder, height: 1),
+                          ),
                           Padding(
-                            padding: const EdgeInsets.only(top: 12),
+                            padding: const EdgeInsets.only(top: 16, bottom: 4),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
