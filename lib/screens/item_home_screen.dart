@@ -911,13 +911,59 @@ class _ItemHomeScreenState extends State<ItemHomeScreen> {
                 ),
               ),
             ),
+            // TOP BADGES (Type & Rating stacked) — rating loaded live from subcollection
             Positioned(
               top: 14,
               right: 14,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(color: Colors.indigoAccent, borderRadius: BorderRadius.circular(20)),
-                child: Text(itemType, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(color: Colors.indigoAccent, borderRadius: BorderRadius.circular(20)),
+                    child: Text(itemType, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(height: 6),
+                  FutureBuilder<QuerySnapshot>(
+                    future: FirebaseFirestore.instance
+                        .collection('items')
+                        .doc(itemId)
+                        .collection('reviews')
+                        .get(),
+                    builder: (context, snap) {
+                      double liveAvg = 0.0;
+                      if (snap.hasData && snap.data!.docs.isNotEmpty) {
+                        final ratings = snap.data!.docs
+                            .map((d) => (d.data() as Map<String, dynamic>?)?['rating'])
+                            .whereType<num>()
+                            .map((n) => n.toDouble())
+                            .toList();
+                        if (ratings.isNotEmpty) {
+                          liveAvg = ratings.reduce((a, b) => a + b) / ratings.length;
+                        }
+                      }
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.star, color: Colors.amber, size: 14),
+                            const SizedBox(width: 4),
+                            Text(
+                              liveAvg > 0 ? liveAvg.toStringAsFixed(1) : "New",
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
             ),
             Positioned(

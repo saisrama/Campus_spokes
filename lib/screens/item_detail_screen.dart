@@ -549,6 +549,27 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                   'comment': _reviewController.text.trim(),
                   'createdAt': FieldValue.serverTimestamp(),
                 });
+                // Recalculate average rating and reviewCount on parent item document
+                try {
+                  final reviewsSnap = await FirebaseFirestore.instance
+                      .collection('items')
+                      .doc(widget.itemId)
+                      .collection('reviews')
+                      .get();
+                  final allRatings = reviewsSnap.docs
+                      .map((d) => (d.data()['rating'] as num?)?.toDouble() ?? 0.0)
+                      .toList();
+                  final count = allRatings.length;
+                  final avg = count > 0
+                      ? allRatings.reduce((a, b) => a + b) / count
+                      : 0.0;
+                  await FirebaseFirestore.instance.collection('items').doc(widget.itemId).update({
+                    'averageRating': double.parse(avg.toStringAsFixed(1)),
+                    'reviewCount': count,
+                  });
+                } catch (e) {
+                  debugPrint("Error updating review aggregates: $e");
+                }
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Thank you for your feedback!"), backgroundColor: kSurface1));
               },
@@ -886,6 +907,9 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                     ],
                   ],
                   const SizedBox(height: 40),
+
+                  // Reviews Section (below the duration box)
+                  _buildReviewsSection(),
                 ],
               ),
             ),
@@ -1090,6 +1114,140 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                 TextSpan(text: description),
               ],
             ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Reviews Section ──
+  Widget _buildReviewsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        rentXSectionLabel("REVIEWS"),
+        rentXCard(
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('items')
+                .doc(widget.itemId)
+                .collection('reviews')
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Text("Error loading reviews", style: TextStyle(color: kTextMuted));
+              }
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator(color: kAccentCyan));
+              }
+
+              final docs = List<DocumentSnapshot>.from(snapshot.data?.docs ?? []);
+              final int reviewCount = docs.length;
+
+              double avgRating = 0.0;
+              if (reviewCount > 0) {
+                final double totalRating = docs.fold(0.0, (sum, doc) {
+                  final data = doc.data() as Map<String, dynamic>?;
+                  return sum + ((data?['rating'] as num?)?.toDouble() ?? 0.0);
+                });
+                avgRating = totalRating / reviewCount;
+              }
+
+              docs.sort((a, b) {
+                final aTime = (a.data() as Map<String, dynamic>?)?['createdAt'] as Timestamp?;
+                final bTime = (b.data() as Map<String, dynamic>?)?['createdAt'] as Timestamp?;
+                if (aTime == null || bTime == null) return 0;
+                return bTime.compareTo(aTime);
+              });
+              final reviews = docs;
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Average Rating Summary
+                  Row(
+                    children: [
+                      Text(
+                        avgRating > 0 ? avgRating.toStringAsFixed(1) : "0.0",
+                        style: const TextStyle(color: kTextPrimary, fontSize: 28, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: List.generate(5, (index) {
+                              if (index < avgRating.floor()) {
+                                return const Icon(Icons.star, color: Colors.amber, size: 20);
+                              } else if (index < avgRating) {
+                                return const Icon(Icons.star_half, color: Colors.amber, size: 20);
+                              } else {
+                                return const Icon(Icons.star_border, color: Colors.amber, size: 20);
+                              }
+                            }),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            "$reviewCount review${reviewCount == 1 ? '' : 's'}",
+                            style: const TextStyle(color: kTextMuted, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (reviews.isEmpty)
+                    const Text("No reviews yet. Be the first to review!", style: TextStyle(color: kTextMuted, fontSize: 13))
+                  else
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: reviews.length,
+                      separatorBuilder: (context, index) => const Divider(color: kBorder, height: 1),
+                      itemBuilder: (context, index) {
+                        final review = reviews[index].data() as Map<String, dynamic>;
+                        final rating = (review['rating'] as num?)?.toInt() ?? 0;
+                        final userName = review['userName'] ?? 'Anonymous';
+                        final comment = review['comment'] ?? '';
+                        final createdAt = review['createdAt'] as Timestamp?;
+                        final dateStr = createdAt != null
+                            ? DateFormat('MMM d, y').format(createdAt.toDate())
+                            : '';
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(userName, style: const TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                                  if (dateStr.isNotEmpty)
+                                    Text(dateStr, style: const TextStyle(color: kTextDim, fontSize: 11)),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: List.generate(5, (i) {
+                                  return Icon(
+                                    i < rating ? Icons.star : Icons.star_border,
+                                    color: Colors.amber,
+                                    size: 14,
+                                  );
+                                }),
+                              ),
+                              if (comment.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(comment, style: const TextStyle(color: kTextMuted, fontSize: 13, height: 1.4)),
+                              ],
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                ],
+              );
+            },
           ),
         ),
       ],

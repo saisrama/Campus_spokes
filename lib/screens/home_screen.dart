@@ -23,7 +23,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final User? user = FirebaseAuth.instance.currentUser;
-  String _selectedLocation = "All";
   final List<String> _locations = ["All", "VK Back Gate", "Mess 2", "VM Cycle Parking", "Mess 1", "Ganga/Meera Parking", "SAC/Malviya Parking"];
   
   // Time Slot Selection
@@ -40,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final ValueNotifier<String> _searchQuery = ValueNotifier('');
 
   List<String> _selectedGearTypes = [];
+  List<String> _selectedLocations = [];
   String _sortBy = 'default';
 
   final List<String> _gearTypes = ["Single Geared", "Multi Geared"];
@@ -49,7 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _bookingLoaded = false;
 
   int get _activeFilterCount =>
-      _selectedGearTypes.length + (_sortBy != 'default' ? 1 : 0);
+      _selectedGearTypes.length + _selectedLocations.length + (_sortBy != 'default' ? 1 : 0);
 
   @override
   void initState() {
@@ -328,9 +328,10 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // ── NEW: Filter & Sort Sheet ──
+  // ── Filter & Sort Sheet ──
   void _openFilterSortSheet() {
     List<String> tempGearTypes = List.from(_selectedGearTypes);
+    List<String> tempLocations = List.from(_selectedLocations);
     String tempSort = _sortBy;
 
     showModalBottomSheet(
@@ -345,9 +346,9 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (context, setSheetState) {
             return DraggableScrollableSheet(
               expand: false,
-              initialChildSize: 0.6,
-              maxChildSize: 0.8,
-              minChildSize: 0.4,
+              initialChildSize: 0.75,
+              maxChildSize: 0.95,
+              minChildSize: 0.5,
               builder: (context, scrollController) {
                 return Column(
                   children: [
@@ -365,7 +366,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           const Text("Filter & Sort", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
                           TextButton(
-                            onPressed: () => setSheetState(() { tempGearTypes.clear(); tempSort = 'default'; }),
+                            onPressed: () => setSheetState(() { tempGearTypes.clear(); tempLocations.clear(); tempSort = 'default'; }),
                             child: const Text("Clear All", style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold)),
                           ),
                         ],
@@ -425,6 +426,42 @@ class _HomeScreenState extends State<HomeScreen> {
                               );
                             }).toList(),
                           ),
+                          const SizedBox(height: 24),
+
+                          // LOCATION
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text("LOCATION", style: TextStyle(color: Color(0xFF38BDF8), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                              if (tempLocations.isNotEmpty)
+                                GestureDetector(
+                                  onTap: () => setSheetState(() => tempLocations.clear()),
+                                  child: const Text("Clear", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 10, runSpacing: 8,
+                            children: _locations.where((l) => l != "All").map((loc) {
+                              final selected = tempLocations.contains(loc);
+                              return FilterChip(
+                                label: Text(loc),
+                                selected: selected,
+                                onSelected: (val) {
+                                  setSheetState(() {
+                                    if (val) tempLocations.add(loc); else tempLocations.remove(loc);
+                                  });
+                                },
+                                selectedColor: Colors.white,
+                                backgroundColor: const Color(0xFF2C2C44),
+                                labelStyle: TextStyle(color: selected ? Colors.black : Colors.white70, fontSize: 13),
+                                checkmarkColor: Colors.black,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                side: BorderSide(color: selected ? Colors.white : Colors.white24),
+                              );
+                            }).toList(),
+                          ),
                           const SizedBox(height: 32),
                         ],
                       ),
@@ -438,6 +475,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           onPressed: () {
                             setState(() {
                               _selectedGearTypes = List.from(tempGearTypes);
+                              _selectedLocations = List.from(tempLocations);
                               _sortBy = tempSort;
                             });
                             Navigator.pop(context);
@@ -543,9 +581,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── NEW: Active Filter Pills ──
+  // ── Active Filter Pills ──
   Widget _buildActiveFilterPills() {
-    if (_selectedGearTypes.isEmpty && _sortBy == 'default') {
+    if (_selectedGearTypes.isEmpty && _selectedLocations.isEmpty && _sortBy == 'default') {
       return const SizedBox.shrink();
     }
 
@@ -562,6 +600,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     for (final gear in _selectedGearTypes) {
       pills.add(_filterPill(gear, onRemove: () => setState(() => _selectedGearTypes.remove(gear)), color: const Color(0xFF38BDF8)));
+    }
+
+    for (final loc in _selectedLocations) {
+      pills.add(_filterPill(loc, onRemove: () => setState(() => _selectedLocations.remove(loc)), color: Colors.teal));
     }
 
     return Container(
@@ -639,12 +681,7 @@ class _HomeScreenState extends State<HomeScreen> {
           var docs = cycleSnapshot.data!.docs;
           
           // FILTERING LOGIC
-          // 1. Location
-          if (_selectedLocation != "All") {
-            docs = docs.where((d) => d['location'] == _selectedLocation).toList();
-          }
-
-          // 2. Active Ride Excl
+          // 1. Active Ride Excl
           if (_activeBooking != null) {
              final abMap = _activeBooking!.data() as Map<String, dynamic>?;
              if (abMap != null && abMap.containsKey('cycleId')) {
@@ -667,7 +704,15 @@ class _HomeScreenState extends State<HomeScreen> {
              return true;
           }).toList();
 
-          // 5. Gear Type Filter
+          // 5. Location Filter (from filter sheet)
+          if (_selectedLocations.isNotEmpty) {
+            docs = docs.where((d) {
+              final data = d.data() as Map<String, dynamic>;
+              return _selectedLocations.contains(data['location']);
+            }).toList();
+          }
+
+          // 6. Gear Type Filter
           if (_selectedGearTypes.isNotEmpty) {
             docs = docs.where((d) {
               final data = d.data() as Map<String, dynamic>;
@@ -675,7 +720,7 @@ class _HomeScreenState extends State<HomeScreen> {
             }).toList();
           }
 
-          // 6. Sort
+          // 7. Sort
           if (_sortBy == 'price_asc') {
             docs.sort((a, b) {
               final ad = a.data() as Map<String, dynamic>;
@@ -717,54 +762,22 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (_activeBooking != null && _bookingLoaded)
                     SliverToBoxAdapter(child: _buildActiveRideCard(context, _activeBooking!)),
 
-                  // 2. Search & Filter Bar
-                  SliverToBoxAdapter(child: _buildSearchAndFilterBar()),
-
-                  // 3. Active Filter Pills
-                  SliverToBoxAdapter(child: _buildActiveFilterPills()),
-
-                  // 4. Time Filter
+                  // 2. Time Filter
                   SliverToBoxAdapter(child: _buildTimeFilter()),
 
-                  // 5. Location Chips (Sticky)
-                  SliverPersistentHeader(
-                    pinned: true,
-                    delegate: _StickyHeaderDelegate(
-                      child: Container(
-                        height: 60,
-                        color: kBgColor,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: _locations.length,
-                          itemBuilder: (context, index) {
-                            String loc = _locations[index];
-                            bool isSelected = _selectedLocation == loc;
-                            return GestureDetector(
-                              onTap: () => setState(() => _selectedLocation = loc),
-                              child: Container(
-                                margin: const EdgeInsets.only(right: 8),
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: isSelected ? kTextPrimary : kSurface1,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: isSelected ? kTextPrimary : kBorder),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    loc,
-                                    style: TextStyle(
-                                      color: isSelected ? Colors.black : kTextMuted,
-                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                  // 3. Search & Filter Bar
+                  SliverToBoxAdapter(child: _buildSearchAndFilterBar()),
+
+                  // 4. Active Filter Pills
+                  SliverToBoxAdapter(child: _buildActiveFilterPills()),
+
+                  // 5. Results count
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      child: Text(
+                        "${filteredDocs.length} cycle${filteredDocs.length == 1 ? '' : 's'} found",
+                        style: const TextStyle(color: Colors.grey, fontSize: 12),
                       ),
                     ),
                   ),
@@ -783,7 +796,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               if (_activeFilterCount > 0) ...[
                                 SizedBox(height: 12),
                                 TextButton(
-                                  onPressed: () => setState(() { _selectedGearTypes.clear(); _sortBy = 'default'; }),
+                                  onPressed: () => setState(() { _selectedGearTypes.clear(); _selectedLocations.clear(); _sortBy = 'default'; }),
                                   child: const Text("Clear Filters", style: TextStyle(color: Color(0xFF38BDF8))),
                                 ),
                               ],
@@ -1408,20 +1421,3 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// Sticky Header Delegate
-class _StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final Widget child;
-  _StickyHeaderDelegate({required this.child});
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => child;
-
-  @override
-  double get maxExtent => 60;
-
-  @override
-  double get minExtent => 60;
-
-  @override
-  bool shouldRebuild(_StickyHeaderDelegate oldDelegate) => oldDelegate.child != child;
-}
