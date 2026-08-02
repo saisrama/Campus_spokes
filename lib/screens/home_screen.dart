@@ -934,29 +934,48 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-            
-            // RATING BADGE (Top Right)
+
+            // RATING BADGE (Top Right) — live from reviews subcollection
             Positioned(
               top: 16, right: 16,
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.6),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.amber.withOpacity(0.5))
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.star, color: Colors.amber, size: 14),
-                    SizedBox(width: 4),
-                    Text(
-                      (data['averageRating'] != null && data['averageRating'] > 0) 
-                          ? (data['averageRating'] as num).toStringAsFixed(1) 
-                          : "New",
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)
+              child: FutureBuilder<QuerySnapshot>(
+                future: FirebaseFirestore.instance
+                    .collection('cycles')
+                    .doc(cycleId)
+                    .collection('reviews')
+                    .get(),
+                builder: (context, snap) {
+                  double liveAvg = 0.0;
+                  if (snap.hasData && snap.data!.docs.isNotEmpty) {
+                    final ratings = snap.data!.docs
+                        .map((d) => (d.data() as Map<String, dynamic>?)?['rating'])
+                        .whereType<num>()
+                        .map((n) => n.toDouble())
+                        .toList();
+                    if (ratings.isNotEmpty) {
+                      liveAvg = ratings.reduce((a, b) => a + b) / ratings.length;
+                    }
+                  }
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.6),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.amber.withOpacity(0.5)),
                     ),
-                  ],
-                ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.star, color: Colors.amber, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          liveAvg > 0 ? liveAvg.toStringAsFixed(1) : "New",
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
 
